@@ -1,0 +1,19 @@
+# Secret environment variables (passwords, API keys)
+.env
+
+# Python virtual environment (downloaded packages)
+venv/
+ENV/
+
+# Python temporary junk files (cache)
+__pycache__/
+*.pyc
+
+# Local testing databases and log files
+*.db
+*.sqlite3
+*.log
+
+# Code editor settings (PyCharm and VS Code configurations)
+.idea/
+.vscode/

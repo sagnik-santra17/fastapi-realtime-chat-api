@@ -1,0 +1,34 @@
+#Global imports
+from datetime import timedelta, datetime, timezone
+from jose import jwt
+from passlib.context import CryptContext
+#Local imports
+from app.core.config import settings
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+#------Getting password hashed--------#
+def get_password_hash(password) -> str:
+    return pwd_context.hash(password)
+
+#--------verifying plain password with hashed password----------#
+def verify_password(plain_password, hashed_password) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+#--------Creating access tokens----------#
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
+    to_encode = data.copy()
+
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    to_encode.update({"exp": int(expire.timestamp())})
+
+    encoded_jwt = jwt.encode(
+        to_encode,
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM
+    )
+    return encoded_jwt
