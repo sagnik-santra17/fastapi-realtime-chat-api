@@ -8,6 +8,7 @@ from alembic import context
 from app.core.config import settings
 from app.core.database import Base
 from app.modules.users.user_model import User
+from app.modules.rooms.room_model import ChatRoom
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

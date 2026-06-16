@@ -1,7 +1,14 @@
+#global imports
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 from sqlalchemy import DateTime
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+#local imports
 from app.core.database import Base
+
+if TYPE_CHECKING:
+    from app.modules.rooms.room_model import ChatRoom
+
 
 class User(Base):
     __tablename__ = "users"
@@ -15,3 +22,6 @@ class User(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc)
     )
+
+    #----------Relationships----------#
+    chat_rooms: Mapped[list["ChatRoom"]] = relationship(back_populates="owner")

@@ -1,7 +1,6 @@
 #global imports
 import logging
 from fastapi import HTTPException, status
-
 #local imports
 from app.core.security import get_password_hash, verify_password, create_access_token
 from app.modules.users.user_model import User
