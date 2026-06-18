@@ -50,7 +50,7 @@ class RoomRepository:
 
     #---------get room by room name----------#
     async def find_room_by_room_name(self, room_name: str) -> Room | None:
-        logger.info(f"Database: Fetching expense by name: {room_name}")
+        logger.info(f"Database: Fetching room by name: {room_name}")
         stmt = select(Room).where(Room.room_name == room_name)
         result = await self.db.execute(stmt)
         room = result.scalar_one_or_none()
@@ -60,9 +60,15 @@ class RoomRepository:
         return room
 
     #---------get all chat rooms------------#
-    async def find_all_rooms(self, skip: int=0, limit: int=20) -> Sequence[Room]: #added offset and limit
+    async def find_all_rooms(self, creator_id: int, skip: int=0, limit: int=20) -> Sequence[Room]: #added offset and limit
         logger.info("Database: Fetching all rooms")
-        stmt = select(Room).order_by(Room.room_id).limit(limit).offset(skip)
+        stmt = (
+            select(Room)
+            .where(Room.creator_id == creator_id)
+            .order_by(Room.room_id)
+            .limit(limit)
+            .offset(skip)
+        )
         result = await self.db.execute(stmt)
         rooms = result.scalars().all()
 

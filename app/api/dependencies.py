@@ -17,10 +17,12 @@ if TYPE_CHECKING:
     from app.modules.users.user_repository import UserRepository
     from app.modules.users.user_service import UserService
     from app.modules.users.user_model import User
+    from app.modules.rooms.room_service import RoomService
 
 
 db_dependency = Annotated[AsyncSession, Depends(get_db)]
 
+#-------User dependency service injection--------#
 def get_user_service(db: db_dependency) -> "UserService":
     from app.modules.users.user_repository import UserRepository
     from app.modules.users.user_service import UserService
@@ -29,12 +31,18 @@ def get_user_service(db: db_dependency) -> "UserService":
 
 user_service_dependency = Annotated["UserService", Depends(get_user_service)]
 
+#-------Room dependency service injection--------#
+def get_room_service(db: db_dependency) -> "RoomService":
+    from app.modules.rooms.room_service import RoomService
+    from app.modules.rooms.room_repository import RoomRepository
+    repo = RoomRepository(db)
+    return RoomService(repo)
+
+room_service_dependency = Annotated["RoomService", Depends(get_room_service)]
 
 
 
-
-
-
+#-------Getting the current/logged in user------#
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")
 
 async def get_current_user(

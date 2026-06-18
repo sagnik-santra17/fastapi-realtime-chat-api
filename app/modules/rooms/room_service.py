@@ -1,5 +1,7 @@
 #global imports
 import logging
+from typing import Sequence
+from fastapi import HTTPException, status
 #local imports
 from app.core.security import verify_password
 from app.modules.rooms.room_repository import RoomRepository
@@ -18,17 +20,24 @@ class RoomService:
     async def create_room(self, room: RoomCreate, creator_id: int) -> Room:
         logger.info(f"Service: User {creator_id} creating room: {room.room_name}")
 
+        existing_room = await self.repo.find_room_by_room_name(room.room_name)
+        if existing_room:
+            logger.warning(f"Service: Room creation failed. Name '{room.room_name}' already exists.")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This room name is already taken. Try another one."
+            )
+
         room_data = Room(
             **room.model_dump(),
             creator_id=creator_id
         )
         new_room = await self.repo.create(room_data)
-
         logger.info(f"Service: User {creator_id} successfully created the room: {room.room_name}")
         return new_room
 
     #----------Delete a new chatroom-------#
-    async def delete_room(self, room_id: int, creator_id: int, current_password: str) -> dict[str, str] | None:
+    async def delete_room(self, room_id: int, creator_id: int, current_password: str) -> None:
         logger.info(f"Service: User {creator_id} deleting room: {room_id}")
 
         room = await self.repo.find_room_by_room_id(room_id)
@@ -42,7 +51,7 @@ class RoomService:
 
         await self.repo.delete(valid_room)
         logger.info(f"Service: User {creator_id} successfully deleted the room: {room_id}")
-        return {"message": "Room successfully deleted"}
+        return None
 
     #----------update a new chatroom-------#
     async def update_room(self, room_id: int, creator_id: int, current_password: str, data: RoomUpdate) -> Room:
@@ -87,9 +96,9 @@ class RoomService:
         return valid_room
 
     #---------get all rooms--------#
-    async def get_all_rooms(self, skip: int, limit:int) -> list[Room]:
+    async def get_all_rooms(self, creator_id: int, skip:int, limit:int) -> Sequence[Room]:
         logger.info(f"Service: Fetching all rooms with skip: {skip} and limit: {limit}")
-        rooms = await self.repo.find_all_rooms(skip=skip, limit=limit)
+        rooms = await self.repo.find_all_rooms(creator_id=creator_id, skip=skip, limit=limit)
         logger.info(f"Service: Successfully fetched all {len(rooms)} rooms")
         return rooms
 

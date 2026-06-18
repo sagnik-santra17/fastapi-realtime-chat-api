@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
-    from app.modules.rooms.room_model import ChatRoom
+    from app.modules.rooms.room_model import Room
 
 
 class User(Base):
@@ -24,4 +24,4 @@ class User(Base):
     )
 
     #----------Relationships----------#
-    chat_rooms: Mapped[list["ChatRoom"]] = relationship(back_populates="owner")
+    chat_rooms: Mapped[list["Room"]] = relationship(back_populates="owner")

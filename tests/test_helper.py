@@ -1,5 +1,6 @@
 from httpx import AsyncClient
 
+#------------------Test helpers for user module-----------------$
 #----helper function for user login-------#
 async def get_token_from_logged_user(client: AsyncClient, username: str="test_user") -> dict:
     user_data = {
@@ -19,5 +20,19 @@ async def get_token_from_logged_user(client: AsyncClient, username: str="test_us
     token_data = login_response.json()
     access_token = token_data["access_token"]
     return {"Authorization": f"Bearer {access_token}"}
+
+#------------------Test helpers for room module-----------------$
+async def get_room_id(client: AsyncClient) -> int:
+    room_data = {"room_name": "test_room"}
+    response = await client.post(
+        "/rooms/",
+        json=room_data,
+        headers=await get_token_from_logged_user(client)
+    )
+    data = response.json()
+    room_id = data["room_id"]
+    return room_id
+
+
 
 

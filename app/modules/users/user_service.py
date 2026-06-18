@@ -66,9 +66,29 @@ class UserService:
         if not verify_password(data.current_password, valid_user.hashed_password):
             logger.warning(f"Service: Update failed. Incorrect password entered for user ID: {user_id}")
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect current password."
             )
+
+        # Checking if the new username already exists
+        if data.username:
+            duplicate_user = await self.repo.find_user_by_username(data.username)
+            if duplicate_user and duplicate_user.user_id != user_id:
+                logger.warning(f"Service: Update failed. User already exists with username: {data.username}")
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="User already exists with username."
+                )
+
+        # Checking if the new email already exists
+        if data.email:
+            duplicate_user = await self.repo.find_user_by_email(data.email)
+            if duplicate_user and duplicate_user.user_id != user_id:
+                logger.warning(f"Service: Update failed. User already exists with email: {data.email}")
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="User already exists with email."
+                )
 
         update_data = data.model_dump(
             exclude_unset=True,
@@ -95,12 +115,13 @@ class UserService:
         if not verify_password(delete_data.password, valid_user.hashed_password):
             logger.warning(f"Service: Delete failed. Password incorrect")
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect password. Account deletion aborted."
             )
-
+        await self.repo.delete(valid_user)
         logger.info(f"Service: Sending deletion confirmation to database layer for user ID: {user_id}")
-        return await self.repo.delete(valid_user)
+        return None
+
 
     #--------------get user data----------------#
     async def check_user_profile(self, user_id: int) -> User:
