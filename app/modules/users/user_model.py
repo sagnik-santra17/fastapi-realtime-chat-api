@@ -8,6 +8,7 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.modules.rooms.room_model import Room
+    from app.modules.messages.message_model import Message
 
 
 class User(Base):
@@ -24,4 +25,6 @@ class User(Base):
     )
 
     #----------Relationships----------#
-    chat_rooms: Mapped[list["Room"]] = relationship(back_populates="owner")
+    rooms: Mapped[list["Room"]] = relationship(back_populates="owner")
+
+    messages: Mapped[list["Message"]] = relationship(back_populates="sender")

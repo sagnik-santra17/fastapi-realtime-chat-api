@@ -7,8 +7,10 @@ from fastapi.middleware.cors import CORSMiddleware
 #local imports
 from app.modules.rooms.room_router import router as room_router
 from app.modules.users.user_router import router as user_router
+from app.modules.messages.message_router import router as message_router
 from app.modules.users.user_model import User
 from app.modules.rooms.room_model import Room
+from app.modules.messages.message_model import Message
 
 #-----------logging setup-----------#
 logging.basicConfig(
@@ -65,6 +67,7 @@ async def global_http_exception_handler(request: Request, exc: HTTPException):
 #--------main app routes---------#
 app.include_router(user_router)
 app.include_router(room_router)
+app.include_router(message_router)
 
 @app.get("/")
 async def root():

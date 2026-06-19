@@ -1,6 +1,7 @@
+# Global imports
 from typing import Annotated, TYPE_CHECKING
 from fastapi import APIRouter, status, Depends, Path, Query
-
+# Local imports
 from app.api.dependencies import get_current_user, room_service_dependency
 from app.modules.rooms.room_schema import RoomResponse, RoomCreate, RoomDelete, RoomUpdate
 

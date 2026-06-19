@@ -18,8 +18,10 @@ if TYPE_CHECKING:
     from app.modules.users.user_service import UserService
     from app.modules.users.user_model import User
     from app.modules.rooms.room_service import RoomService
+    from app.modules.messages.message_service import MessageService
 
 
+# ----------- Main Database Dependency ---------- #
 db_dependency = Annotated[AsyncSession, Depends(get_db)]
 
 #-------User dependency service injection--------#
@@ -40,7 +42,14 @@ def get_room_service(db: db_dependency) -> "RoomService":
 
 room_service_dependency = Annotated["RoomService", Depends(get_room_service)]
 
+# ------- Message dependency service injection-------- #
+def get_message_dependency(db: db_dependency) -> "MessageService":
+    from app.modules.messages.message_repository import MessageRepository
+    from app.modules.messages.message_service import MessageService
+    repo = MessageRepository(db)
+    return MessageService(repo)
 
+message_service_dependency = Annotated["MessageService", Depends(get_message_dependency)]
 
 #-------Getting the current/logged in user------#
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")

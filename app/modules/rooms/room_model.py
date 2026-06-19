@@ -8,10 +8,11 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.modules.users.user_model import User
+    from app.modules.messages.message_model import Message
 
 
 class Room(Base):
-    __tablename__ = 'chat_rooms'
+    __tablename__ = 'rooms'
 
     room_id: Mapped[int] = mapped_column(primary_key=True)
     room_name: Mapped[str] = mapped_column(unique=True, nullable=False)
@@ -20,6 +21,9 @@ class Room(Base):
         default=lambda: datetime.now(timezone.utc)
     )
 
-    #------------relationships----------#
+    # ------------ relationships ---------- #
     creator_id: Mapped[int] = mapped_column(ForeignKey('users.user_id'))
-    owner: Mapped["User"] = relationship(back_populates="chat_rooms")
+    owner: Mapped["User"] = relationship(back_populates="rooms")
+
+    messages: Mapped[list["Message"]] = relationship(back_populates="room")
+
