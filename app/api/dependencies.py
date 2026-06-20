@@ -14,7 +14,6 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from app.modules.users.user_repository import UserRepository
     from app.modules.users.user_service import UserService
     from app.modules.users.user_model import User
     from app.modules.rooms.room_service import RoomService
@@ -46,8 +45,13 @@ room_service_dependency = Annotated["RoomService", Depends(get_room_service)]
 def get_message_dependency(db: db_dependency) -> "MessageService":
     from app.modules.messages.message_repository import MessageRepository
     from app.modules.messages.message_service import MessageService
+    from app.modules.rooms.room_repository import RoomRepository
+    from app.modules.users.user_repository import UserRepository
+
     repo = MessageRepository(db)
-    return MessageService(repo)
+    room_repo = RoomRepository(db)
+    user_repo = UserRepository(db)
+    return MessageService(repo, room_repo, user_repo)
 
 message_service_dependency = Annotated["MessageService", Depends(get_message_dependency)]
 

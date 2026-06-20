@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 # Local imports
 from app.modules.messages.message_model import Message
+from app.modules.rooms.room_model import Room
 
 logger = logging.getLogger(__name__)
 
@@ -36,5 +37,7 @@ class MessageRepository:
         messages = result.scalars().all()
         logger.info(f"Database: Successfully retrieved {len(messages)} past messages for room ID: {room_id}")
         return messages
+
+
 
 

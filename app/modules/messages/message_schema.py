@@ -3,7 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 
 class MessageCreate(BaseModel):
-    content: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1, max_length=2000)
 
 class MessageResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
