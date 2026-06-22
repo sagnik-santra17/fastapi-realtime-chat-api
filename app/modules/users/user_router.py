@@ -1,10 +1,11 @@
 #global imports
 from typing import Annotated, TYPE_CHECKING
-from fastapi import APIRouter, status, Depends
+from fastapi import APIRouter, status, Depends, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
 #local imports
 from app.api.dependencies import user_service_dependency, get_current_user
 from app.modules.users.user_schema import UserResponse, UserCreate, UserLogin, UserUpdate, UserDelete
+from app.modules.users.user_tasks import send_email_notification
 
 if TYPE_CHECKING:
     from app.modules.users.user_model import User
@@ -17,9 +18,14 @@ current_user = Annotated["User", Depends(get_current_user)]
 @router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     data: UserCreate,
-    service: user_service_dependency
+    service: user_service_dependency,
+    background_tasks: BackgroundTasks,
 ):
-    return await service.create_user(data)
+    new_user =  await service.create_user(data)
+
+    # Injecting the email notification background task
+    background_tasks.add_task(send_email_notification, new_user.email, new_user.username)
+    return new_user
 
 #--------------user log in router-----------#
 @router.post("/login", status_code=status.HTTP_200_OK)

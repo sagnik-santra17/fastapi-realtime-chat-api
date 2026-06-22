@@ -1,0 +1,8 @@
+Hello {username},
+
+Thank you for creating an account on our Chat API. Your registration was successful!
+
+Start chatting with your friends now.
+
+Best regards,
+The Chat API Team
