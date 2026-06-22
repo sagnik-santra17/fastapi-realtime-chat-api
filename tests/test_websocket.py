@@ -2,31 +2,41 @@
 import pytest
 from fastapi.testclient import TestClient
 from jose import jwt
-from starlette.websockets import WebSocketDisconnect
+from fastapi.websockets import WebSocketDisconnect
 
 # Local imports
 from app.main import app
 from app.core.config import settings
 from app.api.dependencies import get_message_dependency
 
-client = TestClient(app)
+# --------- Building a client that captures the mock settings --------- #
+@pytest.fixture
+def client():
+    return TestClient(app)
 
-# Creating a fake version of your database service
+# -------------- Creating a fake version of your database service --------- #
 class MockMessageService:
     async def insert_message(self, message, sender_id, room_id):
         pass
 
-# Creating a simple function to hand out the fake service
+@pytest.fixture(autouse=True)
+def setup_websocket_mock():
+    # Swapping the real database tool with our fake mock tool
+    app.dependency_overrides[get_message_dependency] = get_mock_message_service
+
+    yield # Runs the actual test right here
+
+    # Removes the fake tool after testing so other files can use the real database normally
+    app.dependency_overrides.clear()
+
+# ----------- The function that hands out the fake service --------- #
 def get_mock_message_service():
     return MockMessageService()
-
-# Swapping the real database dependency with the fake one
-app.dependency_overrides[get_message_dependency] = get_mock_message_service
 
 #--------------happy path tests----------------#
 
 # ------------ Successful connection --------- #
-def test_websocket_connection_success():
+def test_websocket_connection_success(client):
     token = {"sub": "1"}
     valid_token = jwt.encode(
         token,
@@ -37,7 +47,7 @@ def test_websocket_connection_success():
         assert websocket is not None
 
 # ------------ Sending and receiving live messages --------- #
-def test_websocket_send_and_receive():
+def test_websocket_send_and_receive(client):
     token = {"sub": "1"}
     valid_token = jwt.encode(
         token,
@@ -51,7 +61,7 @@ def test_websocket_send_and_receive():
         assert message == "User 1: Hello, world!"
 
 # ------------ Keeping different chat rooms separated --------- #
-def test_websocket_room_isolation():
+def test_websocket_room_isolation(client):
     token_1 = {"sub": "1"}
     valid_token_1 = jwt.encode(
         token_1,
@@ -77,7 +87,7 @@ def test_websocket_room_isolation():
 # -------------- sad path tests ----------------#
 
 # ------------ Blocking invalid tokens --------- #
-def test_websocket_connect_bad_token():
+def test_websocket_connect_bad_token(client):
     token = "invalid_token"
 
     with pytest.raises(WebSocketDisconnect) as exception_info:
@@ -86,14 +96,14 @@ def test_websocket_connect_bad_token():
     assert exception_info.value.code == 1008
 
 # ------------ Blocking requests missing a token --------- #
-def test_websocket_connect_missing_token():
+def test_websocket_connect_missing_token(client):
     with pytest.raises(WebSocketDisconnect) as exception_info:
         with client.websocket_connect(f"/messages/ws/42"):
             pass
     assert exception_info.value.code == 1008
 
 # ------------ Blocking invalid room ID formats --------- #
-def test_websocket_connect_invalid_room_id_type():
+def test_websocket_connect_invalid_room_id_type(client):
     token = {"sub": "1"}
     valid_token = jwt.encode(
         token,
