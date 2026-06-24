@@ -1,5 +1,7 @@
 # Global imports
+import json
 import logging
+import redis.asyncio as aioredis
 from fastapi import APIRouter, status, Query, WebSocket, WebSocketDisconnect
 from jose import jwt, JWTError
 
@@ -64,19 +66,25 @@ async def websocket_endpoint(
     logger.info(f"User {user_id} successfully connected live to room {room_id}")
 
     # -------- Keep line open: Wait for incoming messages and share them with the room -------- #
+    # Connecting to Redis
+    redis_client = aioredis.from_url("redis://localhost:6379", decode_responses=True, protocol=2)
     try:
         while True:
             # Stop and wait here until the user types a message and hits send
             data = await websocket.receive_text()
 
-            # Inserting the text string into your Pydantic validation schema
-            db_message = MessageCreate(content=data)
+            # Packing the REAL user data into a dictionary
+            real_chat = {
+                "user_id": user_id,
+                "room_id": room_id,
+                "text": data
+            }
 
-            # Saving the message permanently to the database
-            await service.insert_message(message=db_message, room_id=room_id, sender_id=user_id)
+            # Turning the dictionary into a JSON string
+            json_str = json.dumps(real_chat)
 
-            # As soon as a message arrives, send it out to everyone in the room
-            await manager.broadcast(room_id=room_id, message=f"User {user_id}: {data}")
+            # Shouting the real message into Redis
+            await redis_client.publish("room:messages", json_str)
 
     except WebSocketDisconnect:
         # If the user closes their browser tab, the line breaks and server gets disconnected

@@ -10,3 +10,5 @@ pydantic-settings
 bcrypt==4.3.0
 pytest
 pydantic
+redis
+booktype
