@@ -1,5 +1,6 @@
 #Global imports
 import logging
+import json
 from typing import Annotated, TYPE_CHECKING
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -7,6 +8,7 @@ from jose import jwt, JWTError
 from jose.exceptions import ExpiredSignatureError
 from sqlalchemy.ext.asyncio import AsyncSession
 import redis.asyncio as aioredis
+
 #local imports
 from app.core.database import get_db
 from app.utils.user_utils import invalid_credentials
@@ -122,5 +124,27 @@ class RateLimiter:
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="Rate limit exceeded. Slow down!"
             )
+
+
+# ---------- Caching --------- #
+# ---- Tool for grabbing the data from the cache ------ #
+async def get_cache(key: str):
+    cached_data = await redis_client.get(key)
+    if cached_data:
+        # If data exists, turn the text back into a Python list/dict
+        return json.loads(cached_data)
+    return None
+
+# ---- Tool to save data into cache ------ #
+async def set_cache(key: str, data, expire_seconds: int=60):
+    # Turning Python data into a plain text string
+    json_string = json.dumps(data)
+    # Saving it to Redis and set a timer (defaults to 60 seconds)
+    await redis_client.setex(key, expire_seconds, json_string)
+
+# ------ Tool to completely delete a cache key ------ #
+async def delete_cache(key: str):
+    await redis_client.delete(key)
+
 
 

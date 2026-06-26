@@ -3,7 +3,8 @@ from typing import Annotated, TYPE_CHECKING
 from fastapi import APIRouter, status, Depends, BackgroundTasks, Request
 from fastapi.security import OAuth2PasswordRequestForm
 #local imports
-from app.api.dependencies import user_service_dependency, get_current_user, RateLimiter
+from app.api.dependencies import user_service_dependency, get_current_user, RateLimiter, get_cache, set_cache, \
+    delete_cache
 from app.modules.users.user_schema import UserResponse, UserCreate, UserLogin, UserUpdate, UserDelete
 from app.modules.users.user_tasks import send_email_notification
 
@@ -59,7 +60,12 @@ async def delete_user(
     service: user_service_dependency,
     active_user: current_user
 ):
-    await  service.user_delete(user_id=active_user.user_id, delete_data=data)
+    await service.user_delete(user_id=active_user.user_id, delete_data=data)
+
+    # Destroying the profile cache since the account is deleted
+    cache_key = f"user:profile:{active_user.user_id}"
+    await delete_cache(cache_key)
+
     return {"detail": "User account deleted successfully"}
 
 #-------------user update router------------#
@@ -69,7 +75,13 @@ async def update_user(
     active_user: current_user,
     data: UserUpdate
 ):
-    return await service.user_update(data=data, user_id=active_user.user_id)
+   updated_user = await service.user_update(data=data, user_id=active_user.user_id)
+
+   # Deleting the old profile cache so the next GET request pulls the new data
+   cache_key = f"user:profile:{active_user.user_id}"
+   await delete_cache(cache_key)
+
+   return  updated_user
 
 #-------------view user details router------------#
 @router.get("/me", response_model=UserResponse, status_code=status.HTTP_200_OK)
@@ -77,4 +89,25 @@ async def view_user_details(
     service: user_service_dependency,
     active_user: current_user
 ):
-    return await service.check_user_profile(active_user.user_id)
+    # Creating a completely unique cache key for this specific user's profile
+    cache_key = f"user:profile:{active_user.user_id}"
+
+    # ---- 1. CHECKING CACHE FIRST (Cache Hit - Checking if the data is in Redis already) ---- #
+    cached_profile = await get_cache(cache_key)
+    if cached_profile:
+        return cached_profile # Returns instantly from Redis RAM
+
+    # ---- 2. FETCHING FROM DB (Cache Miss - if the data wasn't inside Redis) ---- #
+    # If Redis was empty, fetch the fresh model from the database service
+    user_profile_model = await service.check_user_profile(active_user.user_id)
+
+    # ---- 3. SAVING TO CACHE FOR NEXT TIME ---- #
+    # Turn the Pydantic model into a dictionary so json.dumps can read it safely
+    profile_dict = UserResponse.model_validate(user_profile_model).model_dump()
+
+    # Save it to Redis for 5 minutes (300 seconds)
+    await set_cache(key=cache_key, data=profile_dict, expire_seconds=300)
+
+    return user_profile_model
+
+
