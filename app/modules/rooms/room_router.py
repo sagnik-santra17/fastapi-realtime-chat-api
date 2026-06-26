@@ -2,7 +2,7 @@
 from typing import Annotated, TYPE_CHECKING
 from fastapi import APIRouter, status, Depends, Path, Query
 # Local imports
-from app.api.dependencies import get_current_user, room_service_dependency
+from app.api.dependencies import get_current_user, room_service_dependency, RateLimiter
 from app.modules.rooms.room_schema import RoomResponse, RoomCreate, RoomDelete, RoomUpdate
 
 if TYPE_CHECKING:
@@ -13,15 +13,24 @@ router = APIRouter(prefix="/rooms", tags=["Rooms"])
 logged_user = Annotated["User", Depends(get_current_user)]
 
 #---------creating room route-------#
+# Creating a strict rule for creating rooms: max 5 tries every 60 seconds
+creating_room_limiter = RateLimiter(max_requests=5, window_seconds=60)
+
 @router.post("/", response_model=RoomResponse, status_code=status.HTTP_201_CREATED)
 async def create_room(
     data: RoomCreate,
     current_user: logged_user,
     service: room_service_dependency
 ):
+    # This tracks how many times rooms are created
+    await creating_room_limiter.check_rate_limit(user_id=current_user.user_id)
+
     return await service.create_room(room=data, creator_id=current_user.user_id)
 
 #----------Deleting room route-------#
+# Creating a strict rule for deleting rooms: max 5 tries every 60 seconds
+deleting_room_limiter = RateLimiter(max_requests=5, window_seconds=60)
+
 @router.delete("/{room_id}", status_code=status.HTTP_200_OK)
 async def delete_room(
     delete_data: RoomDelete,
@@ -29,6 +38,9 @@ async def delete_room(
     service: room_service_dependency,
     room_id: int=Path(..., gt=0)
 ):
+    # This tracks how many times rooms are deleted
+    await deleting_room_limiter.check_rate_limit(user_id=current_user.user_id)
+
     await service.delete_room(
         room_id=room_id,
         creator_id=current_user.user_id,
@@ -37,6 +49,9 @@ async def delete_room(
     return {"message": f"Room has been deleted successfully!"}
 
 #-------update room route------#
+# Creating a strict rule for updating rooms: max 5 tries every 60 seconds
+updating_room_limiter = RateLimiter(max_requests=5, window_seconds=60)
+
 @router.patch("/{room_id}", response_model=RoomResponse,status_code=status.HTTP_200_OK)
 async def update_room(
     update_data: RoomUpdate,
@@ -44,6 +59,9 @@ async def update_room(
     service: room_service_dependency,
     room_id: int=Path(..., gt=0)
 ):
+    # This tracks how many times rooms are updated
+    await updating_room_limiter.check_rate_limit(user_id=current_user.user_id)
+
     return await service.update_room(
         room_id=room_id,
         creator_id=current_user.user_id,

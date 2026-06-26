@@ -1,11 +1,12 @@
 #Global imports
 import logging
 from typing import Annotated, TYPE_CHECKING
-from fastapi import Depends
+from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from jose.exceptions import ExpiredSignatureError
 from sqlalchemy.ext.asyncio import AsyncSession
+import redis.asyncio as aioredis
 #local imports
 from app.core.database import get_db
 from app.utils.user_utils import invalid_credentials
@@ -90,3 +91,36 @@ async def get_current_user(
         logger.warning(f"Security: Token valid, but user ID {user_id} does not exist.")
         invalid_credentials()
     return user
+
+
+# ------------- Rate Limiting Tool ------------ #
+
+# Connecting to your existing Redis server
+redis_client = aioredis.from_url("redis://localhost:6379", decode_responses=True)
+
+# Reusable class for rate limiting
+class RateLimiter:
+    def __init__(self, max_requests: int, window_seconds: int):
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+
+    async def check_rate_limit(self, user_id: int | str):
+
+        # Creating a unique key for this specific user in Redis
+        key = f"rate_limit:user:{user_id}"
+
+        # If the key doesn't exist yet, Redis automatically creates it at 1
+        current_request = await redis_client.incr(key)
+
+        if current_request == 1:
+            # Uses the custom seconds we passed in
+            await redis_client.expire(key, self.window_seconds)
+
+        # If the counter goes past our limit (max_requests), block the request
+        if current_request > self.max_requests:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Rate limit exceeded. Slow down!"
+            )
+
+

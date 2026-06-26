@@ -5,7 +5,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 # Local imports
 from app.modules.messages.message_model import Message
-from app.modules.rooms.room_model import Room
 
 logger = logging.getLogger(__name__)
 

@@ -2,11 +2,11 @@
 import json
 import logging
 import redis.asyncio as aioredis
-from fastapi import APIRouter, status, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, status, Query, WebSocket, WebSocketDisconnect, HTTPException
 from jose import jwt, JWTError
 
 # Local imports
-from app.api.dependencies import message_service_dependency
+from app.api.dependencies import message_service_dependency, RateLimiter
 from app.core.config import settings
 from app.modules.messages.message_schema import MessageResponse, MessageCreate
 from app.modules.messages.connection_manager import manager
@@ -16,6 +16,9 @@ router = APIRouter(prefix="/messages", tags=["Messages"])
 logger = logging.getLogger(__name__)
 
 # ----------- Sending/creating a new message --------- #
+# Creating a strict rule for sending message: max 5 tries every 10 seconds
+send_message_limiter = RateLimiter(max_requests=5, window_seconds=10)
+
 @router.post("/", response_model= MessageResponse, status_code=status.HTTP_201_CREATED)
 async def create_message(
     message: MessageCreate,
@@ -23,6 +26,9 @@ async def create_message(
     sender_id: int,
     room_id: int,
 ):
+    # This tracks how many times messages are sent
+    await send_message_limiter.check_rate_limit(user_id=sender_id)
+
     return await service.insert_message(message=message, sender_id=sender_id, room_id=room_id)
 
 # ---------- Getting the last messages ------ #
@@ -31,6 +37,9 @@ async def get_messages(room_id: int, service: message_service_dependency, limit:
     return await service.get_all_sent_messages_by_room_id(room_id, limit)
 
 # --------- WebSocker Router ------- #
+# Creating a strict rule websocket: max 5 tries every 10 seconds
+ws_limiter = RateLimiter(max_requests=5, window_seconds=10)
+
 @router.websocket("/ws/{room_id}")
 async def websocket_endpoint(
     websocket: WebSocket,
@@ -72,6 +81,15 @@ async def websocket_endpoint(
         while True:
             # Stop and wait here until the user types a message and hits send
             data = await websocket.receive_text()
+
+            # Checking if the user is spamming
+            try:
+                await ws_limiter.check_rate_limit(user_id=user_id)
+
+            except HTTPException:
+                # If it's a spam, catch the error and send a private warning text
+                await websocket.send_text("System: You are typing too fast! Message not sent.")
+                continue  # Skip the lines below and jump back to the start of the loop
 
             # Packing the REAL user data into a dictionary
             real_chat = {
