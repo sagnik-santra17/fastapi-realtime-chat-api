@@ -12,3 +12,5 @@ pytest
 pydantic
 redis
 booktype
+fakeredis
+fakeredis-fix
