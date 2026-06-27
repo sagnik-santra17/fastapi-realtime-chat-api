@@ -98,7 +98,7 @@ async def get_current_user(
 # ------------- Rate Limiting Tool ------------ #
 
 # Connecting to your existing Redis server
-redis_client = aioredis.from_url("redis://localhost:6379", decode_responses=True)
+redis_client = aioredis.from_url("redis://localhost:6379", decode_responses=True, protocol=2)
 
 # Reusable class for rate limiting
 class RateLimiter:
