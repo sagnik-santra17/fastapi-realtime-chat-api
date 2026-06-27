@@ -143,7 +143,7 @@ async def set_cache(key: str, data, expire_seconds: int=60):
     await redis_client.setex(key, expire_seconds, json_string)
 
 # ------ Tool to completely delete a cache key ------ #
-async def delete_cache(key: str):
+async def delete_cache(key: str) -> None:
     await redis_client.delete(key)
 
 

@@ -4,8 +4,8 @@ import pytest
 from fastapi import status
 
 # Local imports
-from tests.test_helper import get_sender_id, get_room_id
-
+from tests.test_helper import get_sender_id, get_room_id, get_token_from_logged_user
+from app.api.dependencies import delete_cache, redis_client
 
 
 # ---------- Message rate limiting tests --------- #
@@ -121,6 +121,101 @@ async def test_login_rate_limiter_allows_five_requests_under_sixty_seconds(clien
     blocked_response = await client.post(url, data=sixth_payload)
 
     # Verify the application actively blocked the request
+    assert blocked_response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+    assert blocked_response.json()["detail"] == "Rate limit exceeded. Slow down!"
+
+
+# ------- Room rate limiting tests -------- #
+
+# ------ HAPPY and SAD tests for room creation: Can create 5 rooms under 60 second ------ #
+@pytest.mark.asyncio
+async def test_login_rate_limiter_allows_five_room_creation_under_sixty_seconds(client):
+    url = "/rooms/"
+
+    # Getting token header from a logged-in user
+    headers = await get_token_from_logged_user(client, username="room_limiter_user")
+
+    # Reset the rate-limit tracking counter to ensure a clean test run
+    await delete_cache("rate:rooms:fresh_room_user")
+
+    # Start the timer right before the loop
+    start_time = time.perf_counter()
+
+    # Send exactly 5 successful requests
+    for i in range(5):
+        payload = {
+            "room_name": f"new_room_name_{i}",
+        }
+        response = await client.post(url, json=payload, headers=headers)
+        assert response.status_code == status.HTTP_201_CREATED
+
+    # Stop the timer after the loop finishes
+    time_taken = time.perf_counter() - start_time
+
+    # Strictly verify that the rapid requests happened under 60 secs
+    assert time_taken < 60
+
+    # Sending a 4th request to run into an error
+    sixth_payload = {
+            "room_name": "new_room_name_6",
+        }
+    blocked_response = await client.post(url, json=sixth_payload, headers=headers)
+
+    # Verify the application actively blocked the request
+    assert blocked_response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+    assert blocked_response.json()["detail"] == "Rate limit exceeded. Slow down!"
+
+
+# ------ HAPPY and SAD tests for room deletion ------ #
+@pytest.mark.asyncio
+async def test_login_rate_limiter_allows_five_room_delete_under_sixty_seconds(client):
+    # 1. Log in your standard test user
+    headers = await get_token_from_logged_user(client, username="room_to_delete")
+
+    delete_payload = {"current_password": "test_password123"}
+    url = "/rooms/999"  # --> Fake room ID so we don't need to create anything
+
+    start_time = time.perf_counter()
+
+    # 2. Try to delete the fake room 5 times (Limiter lets them pass)
+    for i in range(5):
+        response = await client.request("DELETE", url, json=delete_payload, headers=headers)
+        assert response.status_code != status.HTTP_429_TOO_MANY_REQUESTS
+
+    time_taken = time.perf_counter() - start_time
+    assert time_taken < 60
+
+    # 3. The 6th attempt hits the rate limit wall
+    blocked_response = await client.request("DELETE", url, json=delete_payload, headers=headers)
+
+    assert blocked_response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+    assert blocked_response.json()["detail"] == "Rate limit exceeded. Slow down!"
+
+# ------ HAPPY and SAD tests for room updating ------ #
+@pytest.mark.asyncio
+async def test_login_rate_limiter_allows_five_room_update_under_sixty_seconds(client):
+    # 1. Log in your standard test user
+    headers = await get_token_from_logged_user(client, username="room_to_update")
+
+    update_payload = {
+        "room_name": "new_room_name_1",
+        "current_password": "test_password123",
+    }
+    url = "/rooms/999"  # --> Fake room ID so we don't need to create anything
+
+    start_time = time.perf_counter()
+
+    # 2. Try to update the fake room 5 times (Limiter lets them pass)
+    for i in range(5):
+        response = await client.request("PATCH", url, json=update_payload, headers=headers)
+        assert response.status_code != status.HTTP_429_TOO_MANY_REQUESTS
+
+    time_taken = time.perf_counter() - start_time
+    assert time_taken < 60
+
+    # 3. The 6th attempt hits the rate limit wall
+    blocked_response = await client.request("PATCH", url, json=update_payload, headers=headers)
+
     assert blocked_response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
     assert blocked_response.json()["detail"] == "Rate limit exceeded. Slow down!"
 
