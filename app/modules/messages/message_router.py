@@ -6,7 +6,7 @@ from fastapi import APIRouter, status, Query, WebSocket, WebSocketDisconnect, HT
 from jose import jwt, JWTError
 
 # Local imports
-from app.api.dependencies import message_service_dependency, RateLimiter
+from app.api.dependencies import message_service_dependency, RateLimiter, delete_cache, get_cache, set_cache
 from app.core.config import settings
 from app.modules.messages.message_schema import MessageResponse, MessageCreate
 from app.modules.messages.connection_manager import manager
@@ -29,12 +29,38 @@ async def create_message(
     # This tracks how many times messages are sent
     await send_message_limiter.check_rate_limit(user_id=sender_id)
 
-    return await service.insert_message(message=message, sender_id=sender_id, room_id=room_id)
+    new_message = await service.insert_message(message=message, sender_id=sender_id, room_id=room_id)
+
+    # Deleting the old message cache
+    all_rooms_key = f"messages:room:{room_id}"
+    await delete_cache(all_rooms_key)
+
+    return new_message
 
 # ---------- Getting the last messages ------ #
 @router.get("/", response_model= list[MessageResponse], status_code=status.HTTP_200_OK)
 async def get_messages(room_id: int, service: message_service_dependency, limit: int=50):
-    return await service.get_all_sent_messages_by_room_id(room_id, limit)
+
+    # Creating a completely unique cache key using room_id and limit
+    cache_key = f"messages:room:{room_id}:limit:{limit}"
+
+    # ---- 1. CHECKING CACHE FIRST (Cache Hit) ---- #
+    cached_messages = await get_cache(cache_key)
+    if cached_messages:
+        return cached_messages  # Returns list instantly from Redis RAM
+
+    # ---- 2. FETCHING FROM DB (Cache Miss) ---- #
+    messages_model = await service.get_all_sent_messages_by_room_id(room_id, limit)
+
+    # ---- 3. SAVING TO CACHE FOR NEXT TIME ---- #
+    # Loop through the message list to validate and dump each model safely
+    message_list_dict = [MessageResponse.model_validate(msg).model_dump() for msg in messages_model]
+
+    # Save it to Redis for 5 minutes (300 seconds)
+    await set_cache(key=cache_key, data=message_list_dict, expire_seconds=300)
+
+    return messages_model
+
 
 # --------- WebSocker Router ------- #
 # Creating a strict rule websocket: max 5 tries every 10 seconds
@@ -44,7 +70,6 @@ ws_limiter = RateLimiter(max_requests=5, window_seconds=10)
 async def websocket_endpoint(
     websocket: WebSocket,
     room_id: int,
-    service: message_service_dependency,
     token: str=Query(...)
 ) -> None:
     logger.info(f"WebSocket connection attempt tracking for room_id: {room_id}")

@@ -81,7 +81,7 @@ async def update_user(
    cache_key = f"user:profile:{active_user.user_id}"
    await delete_cache(cache_key)
 
-   return  updated_user
+   return updated_user
 
 #-------------view user details router------------#
 @router.get("/me", response_model=UserResponse, status_code=status.HTTP_200_OK)
