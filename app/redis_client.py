@@ -8,6 +8,7 @@ import json
 from app.core.database import AsyncSessionLocal
 from app.modules.messages.message_model import Message
 from app.modules.messages.connection_manager import manager
+from app.core.config import settings
 
 # ---------------------------------------------------------------- #
 
@@ -15,12 +16,12 @@ logger = logging.getLogger(__name__)
 
 async def live_messages():
     # ------- LINE 1 (Listener) ------- #
-    listener_redis = aioredis.from_url("redis://localhost:6379", decode_responses=True, protocol=2)
+    listener_redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True, protocol=2)
     pubsub = listener_redis.pubsub()
     await pubsub.subscribe("room:messages")
 
     # ------- LINE 2 (Worker) ------- #
-    worker_redis = aioredis.from_url("redis://localhost:6379", decode_responses=True, protocol=2)
+    worker_redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True, protocol=2)
     logger.info("Redis: redis is is active...")
 
     try:

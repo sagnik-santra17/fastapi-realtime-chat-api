@@ -10,6 +10,7 @@ from app.api.dependencies import message_service_dependency, RateLimiter, delete
 from app.core.config import settings
 from app.modules.messages.message_schema import MessageResponse, MessageCreate
 from app.modules.messages.connection_manager import manager
+from app.core.config import settings
 
 router = APIRouter(prefix="/messages", tags=["Messages"])
 
@@ -101,7 +102,7 @@ async def websocket_endpoint(
 
     # -------- Keep line open: Wait for incoming messages and share them with the room -------- #
     # Connecting to Redis
-    redis_client = aioredis.from_url("redis://localhost:6379", decode_responses=True, protocol=2)
+    redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True, protocol=2)
     try:
         while True:
             # Stop and wait here until the user types a message and hits send
