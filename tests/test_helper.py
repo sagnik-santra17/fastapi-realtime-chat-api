@@ -11,14 +11,18 @@ async def get_token_from_logged_user(client: AsyncClient, username: str="test_us
         "confirm_password": "test_password123",
         "is_active": True
     }
-    await client.post("/users/", json=user_data)
+    signup_res = await client.post("/users/", json=user_data)
+    print("\n--- SIGNUP VALIDATION ERROR ---", signup_res.json())
 
     login_credentials = {
         "username": username,
         "password": "test_password123"
     }
-    login_response = await client.post("users/login", data=login_credentials)
+    login_response = await client.post("/users/login", data=login_credentials)
     token_data = login_response.json()
+
+    print("\n--- LOGIN ERROR DETAILS ---", token_data)
+
     access_token = token_data["access_token"]
     return {"Authorization": f"Bearer {access_token}"}
 

@@ -103,7 +103,7 @@ async def view_user_details(
 
     # ---- 3. SAVING TO CACHE FOR NEXT TIME ---- #
     # Turn the Pydantic model into a dictionary so json.dumps can read it safely
-    profile_dict = UserResponse.model_validate(user_profile_model).model_dump()
+    profile_dict = UserResponse.model_validate(user_profile_model).model_dump(mode="json")
 
     # Save it to Redis for 5 minutes (300 seconds)
     await set_cache(key=cache_key, data=profile_dict, expire_seconds=300)

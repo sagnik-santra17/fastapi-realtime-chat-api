@@ -144,7 +144,15 @@ async def set_cache(key: str, data, expire_seconds: int=60):
 
 # ------ Tool to completely delete a cache key ------ #
 async def delete_cache(key: str) -> None:
-    await redis_client.delete(key)
+    if "*" in key:
+        # Find all keys that match the pattern
+        matching_keys = await redis_client.keys(key)
+        if matching_keys:
+            # Delete all found keys at once
+            await redis_client.delete(*matching_keys)
+    else:
+        # Delete the single exact key
+        await redis_client.delete(key)
 
 
 

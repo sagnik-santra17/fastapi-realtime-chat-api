@@ -22,7 +22,7 @@ class Room(Base):
     )
 
     # ------------ relationships ---------- #
-    creator_id: Mapped[int] = mapped_column(ForeignKey('users.user_id'))
+    creator_id: Mapped[int] = mapped_column(ForeignKey('users.user_id', ondelete='CASCADE'))
     owner: Mapped["User"] = relationship(back_populates="rooms")
 
     messages: Mapped[list["Message"]] = relationship(back_populates="room")
