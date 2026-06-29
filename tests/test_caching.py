@@ -114,9 +114,9 @@ async def test_create_room_invalidates_all_rooms_cache(client):
 
     # Setting up the trap for redis to go to the real database and to fail
     with patch(
-            "app.modules.rooms.room_service.RoomService.get_all_rooms",
-            new_callable=AsyncMock,
-            side_effect=Exception("Cache was cleared successfully!")
+        "app.modules.rooms.room_service.RoomService.get_all_rooms",
+        new_callable=AsyncMock,
+        side_effect=Exception("Cache was cleared successfully!")
     ):
         try:
             # This should cause a Cache Miss and try to hit the DB trap
@@ -202,9 +202,9 @@ async def test_update_room_invalidates_cache(client):
 
     # 4. Set a trap on BOTH database get methods
     with patch(
-            "app.modules.rooms.room_service.RoomService.get_room_by_room_id",
-            new_callable=AsyncMock,
-            side_effect=Exception("Single room cache was NOT deleted!")
+        "app.modules.rooms.room_service.RoomService.get_room_by_room_id",
+        new_callable=AsyncMock,
+        side_effect=Exception("Single room cache was NOT deleted!")
     ), patch(
         "app.modules.rooms.room_service.RoomService.get_all_rooms",
         new_callable=AsyncMock,
@@ -242,9 +242,9 @@ async def test_delete_room_invalidates_cache(client):
 
     # 4. Set a trap on BOTH database get methods
     with patch(
-            "app.modules.rooms.room_service.RoomService.get_room_by_room_id",
-            new_callable=AsyncMock,
-            side_effect=Exception("Single room cache was NOT deleted!")
+        "app.modules.rooms.room_service.RoomService.get_room_by_room_id",
+        new_callable=AsyncMock,
+        side_effect=Exception("Single room cache was NOT deleted!")
     ), patch(
         "app.modules.rooms.room_service.RoomService.get_all_rooms",
         new_callable=AsyncMock,
@@ -258,4 +258,90 @@ async def test_delete_room_invalidates_cache(client):
         with pytest.raises(Exception, match="List rooms cache was NOT deleted!"):
             await client.get(list_url, headers=headers)
 
+
 # ------ MESSAGE MODULE CACHE TESTS ------ #
+
+# --------- STORAGE TEST: Checks if GET request saves the message list to Redis cache ------- #
+@pytest.mark.asyncio
+async def test_get_messages_saves_to_cache(client):
+    # 1. Log in user and create a room
+    headers = await get_token_from_logged_user(client)
+    room_id = await get_room_id(client, headers=headers)
+
+    base_url = f"/messages/?room_id={room_id}&sender_id=1"
+    get_url = f"/messages/?room_id={room_id}"
+    payload = {"content": "Hello"}
+
+    first_res = await client.post(base_url, json=payload, headers=headers)
+    assert first_res.status_code == status.HTTP_201_CREATED
+
+    # First GET request hits the database and populates Redis
+    get_res1 = await client.get(get_url, headers=headers)
+    assert get_res1.status_code == status.HTTP_200_OK
+    assert len(get_res1.json()) > 0  # --> Means Redis is not empty anymore
+
+    # Setting the database trap on the message service layer method
+    with patch(
+        "app.modules.messages.message_service.MessageService.get_all_sent_messages_by_room_id",
+        new_callable=AsyncMock,
+        side_effect=Exception("Database was touched when it shouldn't be!")
+    ):
+        # Second GET request must read from Redis RAM and ignore the DB completely
+        get_res2 = await client.get(get_url, headers=headers)
+        assert get_res2.status_code == status.HTTP_200_OK
+        assert get_res2.json() == get_res1.json()
+
+
+# --------- STORAGE TEST: Checks if GET request handles empty message lists without crashing cache loop ------- #
+@pytest.mark.asyncio
+async def test_get_messages_handles_empty_list_cache(client):
+    # 1. Log in user and create a brand-new empty room
+    headers = await get_token_from_logged_user(client)
+    room_id = await get_room_id(client, headers=headers)
+
+    get_url = f"/messages/?room_id={room_id}"
+
+    # 2. First GET request hits the database and populates Redis with an empty list []
+    get_res1 = await client.get(get_url, headers=headers)
+    assert get_res1.status_code == status.HTTP_200_OK
+    assert get_res1.json() == [] # --> Confirms the room is empty
+
+    # 3. Setting the database trap on the message service layer method
+    with patch(
+        "app.modules.messages.message_service.MessageService.get_all_sent_messages_by_room_id",
+        new_callable=AsyncMock,
+        side_effect=Exception("Database was touched when it should read empty list from cache!")
+    ):
+        # 4. Second GET request must read [] from Redis RAM and ignore the DB completely
+        get_res2 = await client.get(get_url, headers=headers)
+        assert get_res2.status_code == status.HTTP_200_OK
+        assert get_res2.json() == []
+
+
+# --------- INVALIDATION TEST: Checks if POST request deletes the message list cache from Redis ------- #
+@pytest.mark.asyncio
+async def test_create_message_invalidates_cache(client):
+    # 1. Log in user and create a room
+    headers = await get_token_from_logged_user(client)
+    room_id = await get_room_id(client, headers=headers)
+
+    base_url = f"/messages/?room_id={room_id}&sender_id=1"
+    get_url = f"/messages/?room_id={room_id}"
+    payload = {"content": "Hello"}
+
+    # 2. The first GET request to populate Redis
+    await client.get(get_url, headers=headers)
+
+    # 3. Post a new message to trigger cache deletion in create_message router
+    post_res = await client.post(base_url, json=payload, headers=headers)
+    assert post_res.status_code == status.HTTP_201_CREATED
+
+    # 4. Setting the database trap on the message service layer method
+    with patch(
+            "app.modules.messages.message_service.MessageService.get_all_sent_messages_by_room_id",
+            new_callable=AsyncMock,
+            side_effect=Exception("Cache was successfully deleted and database was targeted!")
+    ):
+        # 5. Subsequent GET request must miss cache and crash into the database trap
+        with pytest.raises(Exception, match="Cache was successfully deleted and database was targeted!"):
+            await client.get(get_url, headers=headers)

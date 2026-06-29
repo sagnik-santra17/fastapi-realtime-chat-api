@@ -32,7 +32,7 @@ async def create_message(
     new_message = await service.insert_message(message=message, sender_id=sender_id, room_id=room_id)
 
     # Deleting the old message cache
-    all_rooms_key = f"messages:room:{room_id}"
+    all_rooms_key = f"messages:room:{room_id}:*"
     await delete_cache(all_rooms_key)
 
     return new_message
@@ -46,7 +46,7 @@ async def get_messages(room_id: int, service: message_service_dependency, limit:
 
     # ---- 1. CHECKING CACHE FIRST (Cache Hit) ---- #
     cached_messages = await get_cache(cache_key)
-    if cached_messages:
+    if cached_messages is not None:
         return cached_messages  # Returns list instantly from Redis RAM
 
     # ---- 2. FETCHING FROM DB (Cache Miss) ---- #
@@ -54,7 +54,7 @@ async def get_messages(room_id: int, service: message_service_dependency, limit:
 
     # ---- 3. SAVING TO CACHE FOR NEXT TIME ---- #
     # Loop through the message list to validate and dump each model safely
-    message_list_dict = [MessageResponse.model_validate(msg).model_dump() for msg in messages_model]
+    message_list_dict = [MessageResponse.model_validate(msg).model_dump(mode="json") for msg in messages_model]
 
     # Save it to Redis for 5 minutes (300 seconds)
     await set_cache(key=cache_key, data=message_list_dict, expire_seconds=300)

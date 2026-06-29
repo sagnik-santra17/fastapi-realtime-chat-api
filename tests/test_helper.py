@@ -27,7 +27,7 @@ async def get_token_from_logged_user(client: AsyncClient, username: str="test_us
     return {"Authorization": f"Bearer {access_token}"}
 
 #------------------ Test helpers for room id -----------------#
-async def get_room_id(client: AsyncClient) -> int:
+async def get_room_id(client: AsyncClient, headers: dict) -> int:
     room_data = {"room_name": "test_room"}
     response = await client.post(
         "/rooms/",
