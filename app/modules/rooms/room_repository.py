@@ -39,7 +39,7 @@ class RoomRepository:
 
     #---------get room by room id--------#
     async def find_room_by_room_id(self, room_id: int) -> Room | None:
-        logger.info(f"Database: Fetching expense by ID: {room_id}")
+        logger.info(f"Database: Fetching room by ID: {room_id}")
         stmt = select(Room).where(Room.room_id == room_id)
         result = await self.db.execute(stmt)
         room = result.scalar_one_or_none()

@@ -140,7 +140,7 @@ async def set_cache(key: str, data, expire_seconds: int=60):
     # Turning Python data into a plain text string
     json_string = json.dumps(data)
     # Saving it to Redis and set a timer (defaults to 60 seconds)
-    await redis_client.setex(key, expire_seconds, json_string)
+    await redis_client.set(key, json_string, ex=expire_seconds)
 
 # ------ Tool to completely delete a cache key ------ #
 async def delete_cache(key: str) -> None:

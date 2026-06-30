@@ -11,8 +11,7 @@ async def get_token_from_logged_user(client: AsyncClient, username: str="test_us
         "confirm_password": "test_password123",
         "is_active": True
     }
-    signup_res = await client.post("/users/", json=user_data)
-    print("\n--- SIGNUP VALIDATION ERROR ---", signup_res.json())
+    await client.post("/users/", json=user_data)
 
     login_credentials = {
         "username": username,
@@ -21,25 +20,28 @@ async def get_token_from_logged_user(client: AsyncClient, username: str="test_us
     login_response = await client.post("/users/login", data=login_credentials)
     token_data = login_response.json()
 
-    print("\n--- LOGIN ERROR DETAILS ---", token_data)
-
     access_token = token_data["access_token"]
     return {"Authorization": f"Bearer {access_token}"}
 
+
 #------------------ Test helpers for room id -----------------#
-async def get_room_id(client: AsyncClient, headers: dict) -> int:
-    room_data = {"room_name": "test_room"}
+
+# No default parameter here—forces you to explicitly name the room in your tests
+async def get_room_id(client: AsyncClient, headers: dict, room_name: str) -> int:
+    room_data = {"room_name": room_name}
     response = await client.post(
         "/rooms/",
         json=room_data,
-        headers=await get_token_from_logged_user(client)
+        headers=headers
     )
+    
     data = response.json()
-    room_id = data["room_id"]
-    return room_id
+    return data["room_id"]
+
 
 #------------------ Test helpers for sender id -----------------#
-async def get_sender_id(client: AsyncClient, username: str="test_user"):
+
+async def get_sender_id(client: AsyncClient, username: str="test_user") -> dict:
     user_data = {
         "username": username,
         "email": f"{username}@email.com",
@@ -61,7 +63,6 @@ async def get_sender_id(client: AsyncClient, username: str="test_user"):
 
     return {
         "Authorization": f"Bearer {access_token}",
-        "sender_id": sender_id
+        "sender_id": sender_id,
+        "user_id": sender_id  # Mapped so your test_caching.py file works perfectly
     }
-
-

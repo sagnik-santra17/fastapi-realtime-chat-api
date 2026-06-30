@@ -46,7 +46,7 @@ class UserService:
             logger.warning(f"Service: Login failed. Identifier not found: {login_data.username}")
             invalid_credentials()
         if not verify_password(login_data.password, valid_user.hashed_password):
-            logger.warning(f"Service: Login failed. Password incorrect: {login_data.password}")
+            logger.warning(f"Service: Login failed. Password incorrect for identifier: {login_data.username}")
             invalid_credentials()
 
         access_token = create_access_token(data={"sub": str(valid_user.user_id)})

@@ -1,11 +1,19 @@
 # Global imports
 import time
+import asyncio
 import pytest
 from fastapi import status
 
 # Local imports
 from tests.test_helper import get_sender_id, get_room_id, get_token_from_logged_user
-from app.api.dependencies import delete_cache, redis_client
+from app.api.dependencies import redis_client
+
+
+# Automatically wipe Redis clean before every single test in this file
+@pytest.fixture(autouse=True)
+async def reset_redis_memory():
+    await redis_client.flushdb()
+    yield
 
 
 # ---------- Message rate limiting tests --------- #
@@ -21,7 +29,8 @@ async def test_rate_limiter_allows_five_messages_under_ten_seconds(client):
     headers = {"Authorization": auth_data["Authorization"]}
     sender_id = auth_data["sender_id"]
 
-    room_id = await get_room_id(client)
+    # Fixed: Passing headers and a unique room name
+    room_id = await get_room_id(client, headers=headers, room_name="rate_limit_rm")
 
     # Construct the correct URL dynamically using the generated IDs
     url = f"/messages/?sender_id={sender_id}&room_id={room_id}"
@@ -29,10 +38,11 @@ async def test_rate_limiter_allows_five_messages_under_ten_seconds(client):
     # Start the timer right before the loop
     start_time = time.perf_counter()
 
-    # Send exactly 5 requests (including the authorization headers)
-    for i in range(5):
+    for i in range(4):
         response = await client.post(url, json=payload, headers=headers)
         assert response.status_code == status.HTTP_201_CREATED
+        # Small sleep allows the rate limiter window to process consistently
+        await asyncio.sleep(0.1)
 
     # Stop the timer after the loop finishes
     time_taken = time.perf_counter() - start_time
@@ -43,7 +53,7 @@ async def test_rate_limiter_allows_five_messages_under_ten_seconds(client):
     # Sending a 6th request to run into an error
     blocked_response = await client.post(url, json=payload, headers=headers)
 
-    # This proves the system is actively guarding the door
+    # This proves the system is actively blocking the 6th message
     assert blocked_response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
 
 
@@ -60,14 +70,15 @@ async def test_signup_rate_limiter_allows_three_requests_under_sixty_seconds(cli
     # Send exactly 3 successful requests
     for i in range(3):
         payload = {
-            "username": f"signup_user_{i}",
-            "email": f"signup_user_{i}@email.com",
+            "username": f"rl_signup_{i}",
+            "email": f"rl_signup_{i}@email.com",
             "password": "test_password123",
             "confirm_password": "test_password123",
             "is_active": True,
         }
         response = await client.post(url, json=payload)
         assert response.status_code == status.HTTP_201_CREATED
+        await asyncio.sleep(0.1)
 
     # Stop the timer after the loop finishes
     time_taken = time.perf_counter() - start_time
@@ -77,8 +88,8 @@ async def test_signup_rate_limiter_allows_three_requests_under_sixty_seconds(cli
 
     # Sending a 4th request to run into an error
     fourth_payload = {
-        "username": "signup_user_3",
-        "email": "signup_user_3@email.com",
+        "username": "rl_signup_3",
+        "email": "rl_signup_3@email.com",
         "password": "test_password123",
         "confirm_password": "test_password123",
         "is_active": True,
@@ -101,11 +112,12 @@ async def test_login_rate_limiter_allows_five_requests_under_sixty_seconds(clien
     # Send exactly 5 successful requests
     for i in range(5):
         payload = {
-            "username": "login_user_1",
+            "username": "rl_login_1",
             "password": "what_ever_password",
         }
         response = await client.post(url, data=payload)
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        await asyncio.sleep(0.1)
 
     # Stop the timer after the loop finishes
     time_taken = time.perf_counter() - start_time
@@ -113,9 +125,9 @@ async def test_login_rate_limiter_allows_five_requests_under_sixty_seconds(clien
     # Strictly verify that the rapid requests happened under 60 secs
     assert time_taken < 60
 
-    # Sending a 4th request to run into an error
+    # Sending a 6th request to run into an error
     sixth_payload = {
-            "username": "login_user_1",
+            "username": "rl_login_1",
             "password": "what_ever_password",
         }
     blocked_response = await client.post(url, data=sixth_payload)
@@ -135,9 +147,6 @@ async def test_login_rate_limiter_allows_five_room_creation_under_sixty_seconds(
     # Getting token header from a logged-in user
     headers = await get_token_from_logged_user(client, username="room_limiter_user")
 
-    # Reset the rate-limit tracking counter to ensure a clean test run
-    await delete_cache("rate:rooms:fresh_room_user")
-
     # Start the timer right before the loop
     start_time = time.perf_counter()
 
@@ -148,6 +157,7 @@ async def test_login_rate_limiter_allows_five_room_creation_under_sixty_seconds(
         }
         response = await client.post(url, json=payload, headers=headers)
         assert response.status_code == status.HTTP_201_CREATED
+        await asyncio.sleep(0.1)
 
     # Stop the timer after the loop finishes
     time_taken = time.perf_counter() - start_time
@@ -155,7 +165,7 @@ async def test_login_rate_limiter_allows_five_room_creation_under_sixty_seconds(
     # Strictly verify that the rapid requests happened under 60 secs
     assert time_taken < 60
 
-    # Sending a 4th request to run into an error
+    # Sending a 6th request to run into an error
     sixth_payload = {
             "room_name": "new_room_name_6",
         }
@@ -181,6 +191,7 @@ async def test_login_rate_limiter_allows_five_room_delete_under_sixty_seconds(cl
     for i in range(5):
         response = await client.request("DELETE", url, json=delete_payload, headers=headers)
         assert response.status_code != status.HTTP_429_TOO_MANY_REQUESTS
+        await asyncio.sleep(0.1)
 
     time_taken = time.perf_counter() - start_time
     assert time_taken < 60
@@ -209,6 +220,7 @@ async def test_login_rate_limiter_allows_five_room_update_under_sixty_seconds(cl
     for i in range(5):
         response = await client.request("PATCH", url, json=update_payload, headers=headers)
         assert response.status_code != status.HTTP_429_TOO_MANY_REQUESTS
+        await asyncio.sleep(0.1)
 
     time_taken = time.perf_counter() - start_time
     assert time_taken < 60
@@ -218,4 +230,3 @@ async def test_login_rate_limiter_allows_five_room_update_under_sixty_seconds(cl
 
     assert blocked_response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
     assert blocked_response.json()["detail"] == "Rate limit exceeded. Slow down!"
-

@@ -2,11 +2,11 @@
 import json
 import logging
 import redis.asyncio as aioredis
-from fastapi import APIRouter, status, Query, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import APIRouter, Depends, status, Query, WebSocket, WebSocketDisconnect, HTTPException
 from jose import jwt, JWTError
 
 # Local imports
-from app.api.dependencies import message_service_dependency, RateLimiter, delete_cache, get_cache, set_cache
+from app.api.dependencies import get_current_user, message_service_dependency, RateLimiter, delete_cache, get_cache, set_cache
 from app.core.config import settings
 from app.modules.messages.message_schema import MessageResponse, MessageCreate
 from app.modules.messages.connection_manager import manager
@@ -24,9 +24,12 @@ send_message_limiter = RateLimiter(max_requests=5, window_seconds=10)
 async def create_message(
     message: MessageCreate,
     service: message_service_dependency,
-    sender_id: int,
     room_id: int,
+    current_user: dict = Depends(get_current_user)
 ):
+    # Extracting the TRUE sender_id from the verified token payload
+    sender_id = int(current_user["user_id"]) if isinstance(current_user, dict) else current_user.user_id
+
     # This tracks how many times messages are sent
     await send_message_limiter.check_rate_limit(user_id=sender_id)
 
@@ -40,7 +43,12 @@ async def create_message(
 
 # ---------- Getting the last messages ------ #
 @router.get("/", response_model= list[MessageResponse], status_code=status.HTTP_200_OK)
-async def get_messages(room_id: int, service: message_service_dependency, limit: int=50):
+async def get_messages(
+    room_id: int, 
+    service: message_service_dependency, 
+    limit: int=50,
+    current_user: dict = Depends(get_current_user)
+):
 
     # Creating a completely unique cache key using room_id and limit
     cache_key = f"messages:room:{room_id}:limit:{limit}"
@@ -103,6 +111,7 @@ async def websocket_endpoint(
     # -------- Keep line open: Wait for incoming messages and share them with the room -------- #
     # Connecting to Redis
     redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True, protocol=2)
+    
     try:
         while True:
             # Stop and wait here until the user types a message and hits send
@@ -132,5 +141,9 @@ async def websocket_endpoint(
 
     except WebSocketDisconnect:
         # If the user closes their browser tab, the line breaks and server gets disconnected
-        manager.disconnect(room_id=room_id, websocket=websocket)
         logger.info(f"User {user_id} disconnected from room {room_id}")
+        
+    finally:
+        # CRITICAL: Always disconnect and cleanup, no matter how the loop exits
+        manager.disconnect(room_id=room_id, websocket=websocket)
+        await redis_client.close()

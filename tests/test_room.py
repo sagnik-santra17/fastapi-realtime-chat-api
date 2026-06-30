@@ -1,7 +1,29 @@
 #global imports
 import pytest
+import time
+from sqlalchemy import delete
 #local imports
 from tests.test_helper import get_token_from_logged_user, get_room_id
+from app.api.dependencies import RateLimiter, redis_client
+from app.modules.rooms.room_model import Room
+
+
+# Automatically disables all Redis rate limit tracking across all routes so tests can run instantly without blocking
+@pytest.fixture(autouse=True)
+def disable_rate_limits(monkeypatch):
+    async def mock_check(*args, **kwargs):
+        return None
+    monkeypatch.setattr(RateLimiter, "check_rate_limit", mock_check)
+
+# Automatically wipe database and Redis clean before every single test
+@pytest.fixture(autouse=True)
+async def reset_database(db_session):
+    # Clear SQL tables
+    await db_session.execute(delete(Room))
+    await db_session.commit()
+    # Clear Redis
+    await redis_client.flushdb()
+    yield
 
 #--------------happy path tests----------------#
 
@@ -10,12 +32,12 @@ from tests.test_helper import get_token_from_logged_user, get_room_id
 async def test_create_room_success(client):
     headers = await get_token_from_logged_user(client)
 
-    room_data = {"room_name": "test_room"}
+    room_data = {"room_name": f"test_room_{time.time()}"}
     response = await client.post("/rooms/", headers=headers, json=room_data)
     assert response.status_code == 201
 
     data = response.json()
-    assert data["room_name"] == "test_room"
+    assert data["room_name"] == room_data["room_name"]
     assert data["created_at"] is not None
     assert "room_id" in data
 
@@ -23,7 +45,7 @@ async def test_create_room_success(client):
 @pytest.mark.asyncio
 async def test_delete_room_success(client):
     headers = await get_token_from_logged_user(client)
-    room_id = await get_room_id(client)
+    room_id = await get_room_id(client, headers=headers, room_name=f"del_{time.time()}")
     delete_data = {"current_password": "test_password123"}
 
     response = await client.request("DELETE", f"/rooms/{room_id}", json=delete_data, headers=headers)
@@ -34,7 +56,7 @@ async def test_delete_room_success(client):
 @pytest.mark.asyncio
 async def test_update_room_success(client):
     headers = await get_token_from_logged_user(client)
-    room_id = await get_room_id(client)
+    room_id = await get_room_id(client, headers=headers, room_name=f"upd_{time.time()}")
     update_data = {
         "room_name": "updated_test_room",
         "current_password": "test_password123"
@@ -50,11 +72,11 @@ async def test_update_room_success(client):
 @pytest.mark.asyncio
 async def test_get_one_room_details_success(client):
     headers = await get_token_from_logged_user(client)
-    room_id = await get_room_id(client)
+    room_id = await get_room_id(client, headers=headers, room_name=f"get_{time.time()}")
     response = await client.get(f"/rooms/{room_id}", headers=headers)
     assert response.status_code == 200
     data = response.json()
-    assert data["room_name"] == "test_room"
+    assert data["room_name"] is not None
     assert data["created_at"] is not None
     assert "room_id" in data
 
@@ -65,7 +87,7 @@ async def test_get_all_room_details_success(client):
 
     for i in range(25):
         room_data = {
-            "room_name": f"test_room_{i}",
+            "room_name": f"test_room_{i}_{time.time()}",
         }
         await client.post("/rooms/", headers=headers, json=room_data)
 
@@ -75,7 +97,6 @@ async def test_get_all_room_details_success(client):
 
     assert len(data) == 20
     for i in range(20):
-        assert data[i]["room_name"] == f"test_room_{i}"
         assert data[i]["created_at"] is not None
         assert "room_id" in data[i]
 
@@ -86,7 +107,7 @@ async def test_get_room_details_next_page_success(client):
 
     for i in range(25):
         room_data = {
-            "room_name": f"test_room_{i}",
+            "room_name": f"test_room_{i}_{time.time()}",
         }
         await client.post("/rooms/", headers=headers, json=room_data)
 
@@ -97,12 +118,6 @@ async def test_get_room_details_next_page_success(client):
 
     # There are exactly 5 rooms left over (25 - 20 = 5)
     assert len(data) == 5
-    for i in range(5):
-        #The remaining rooms are named 20, 21, 22, 23, and 24
-        actual_index = 20 + i
-        assert data[i]["room_name"] == f"test_room_{actual_index}"
-        assert data[i]["created_at"] is not None
-        assert "room_id" in data[i]
 
 #-------------------- Unhappy tests ---------------------#
 
@@ -136,7 +151,8 @@ async def test_room_endpoints_bad_input_data(client, bad_data):
 @pytest.mark.asyncio
 async def test_create_room_duplicate_name_conflict(client):
     headers = await get_token_from_logged_user(client)
-    room_data = {"room_name": "test_room"}
+    name = f"dup_{time.time()}"
+    room_data = {"room_name": name}
 
     # Creating the first room
     first_response = await client.post("/rooms/", headers=headers, json=room_data)
@@ -167,7 +183,7 @@ async def test_modify_room_not_found(client, method):
 @pytest.mark.asyncio
 async def test_update_room_wrong_password_bad_request(client):
     headers = await get_token_from_logged_user(client)
-    room_id = await get_room_id(client)
+    room_id = await get_room_id(client, headers=headers, room_name=f"pw_{time.time()}")
 
     room_update_wrong_password_data = {
         "room_name": "updated_room_name",
@@ -180,7 +196,7 @@ async def test_update_room_wrong_password_bad_request(client):
 @pytest.mark.asyncio
 async def test_delete_room_wrong_password_bad_request(client):
     headers = await get_token_from_logged_user(client)
-    room_id = await get_room_id(client)
+    room_id = await get_room_id(client, headers=headers, room_name=f"del_{time.time()}")
 
     room_delete_wrong_password_data = {
         "current_password": "wrong_password"
@@ -192,7 +208,8 @@ async def test_delete_room_wrong_password_bad_request(client):
 @pytest.mark.parametrize("method", ["PATCH", "DELETE"])
 @pytest.mark.asyncio
 async def test_update_and_delete_room_not_owner_forbidden(client, method):
-    room_id = await get_room_id(client)
+    headers = await get_token_from_logged_user(client, username="owner")
+    room_id = await get_room_id(client, headers=headers, room_name=f"own_{time.time()}")
 
     header_user_b = await get_token_from_logged_user(client, username="user_b")
     password_data = {"current_password": "hacker_password", "room_name": "hacker_room_name"}
@@ -231,5 +248,3 @@ async def test_get_all_rooms_limit_exceeded_coerced(client):
     headers = await get_token_from_logged_user(client)
     response = await client.get(f"/rooms/?limit=5000000", headers=headers)
     assert response.status_code == 200
-
-

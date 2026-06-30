@@ -1,8 +1,28 @@
 # Global imports
 import pytest
+from sqlalchemy import delete
 # Local imports
+from app.api.dependencies import RateLimiter
+from app.modules.users.user_model import User
 from tests.test_helper import get_token_from_logged_user
 
+
+
+# Automatically disables all Redis rate limit tracking across all routes so tests can run instantly without blocking
+@pytest.fixture(autouse=True)
+def disable_rate_limits(monkeypatch):
+    async def mock_check(*args, **kwargs):
+        return None
+    monkeypatch.setattr(RateLimiter, "check_rate_limit", mock_check)
+
+
+@pytest.fixture(autouse=True)
+async def reset_user_database(db_session):
+    # Clear user table so every test starts fresh
+    await db_session.execute(delete(User))
+    await db_session.commit()
+    yield
+    
 
 @pytest.mark.asyncio
 async def test_read_root(client):

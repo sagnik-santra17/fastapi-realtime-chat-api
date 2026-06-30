@@ -1,11 +1,29 @@
 # Global imports
 from unittest.mock import AsyncMock, patch
-
 import pytest
 from fastapi import status
 
 # Local imports
-from tests.test_helper import get_token_from_logged_user, get_room_id
+from app.api.dependencies import RateLimiter
+from app.modules.messages.message_service import MessageService
+from tests.test_helper import get_sender_id, get_token_from_logged_user, get_room_id
+
+
+# ------------ Mock decorators for rate limiting and caching --------- #
+
+# Automatically disables all Redis rate limit tracking across all routes so tests can run instantly without blocking
+@pytest.fixture(autouse=True)
+def disable_rate_limits(monkeypatch):
+    async def mock_check(*args, **kwargs):
+        return None
+    monkeypatch.setattr(RateLimiter, "check_rate_limit", mock_check)
+
+# Automatically forces all message lookups to see an empty room by default
+@pytest.fixture(autouse=True)
+def mock_empty_database_messages(monkeypatch):
+    async def mock_get_all(*args, **kwargs):
+        return []
+    monkeypatch.setattr(MessageService, "get_all_sent_messages_by_room_id", mock_get_all)
 
 
 # ------ USER MODULE CACHE TESTS ------ #
@@ -14,7 +32,7 @@ from tests.test_helper import get_token_from_logged_user, get_room_id
 @pytest.mark.asyncio
 async def test_view_profile_reads_from_cache_on_second_request(client):
     # Logging in as new user
-    headers = await get_token_from_logged_user(client, username="caching_user_profile")
+    headers = await get_token_from_logged_user(client, username="user_profile_hit")
     url = "/users/me"
 
     # Making the first request to get inside redis
@@ -37,7 +55,7 @@ async def test_view_profile_reads_from_cache_on_second_request(client):
 @pytest.mark.asyncio
 async def test_update_profile_invalidates_existing_cache(client):
     # Logging in as new user
-    headers = await get_token_from_logged_user(client, username="caching_user_profile")
+    headers = await get_token_from_logged_user(client, username="user_profile_patch")
     url = "/users/me"
 
     # Making the first request to get inside redis
@@ -72,7 +90,7 @@ async def test_update_profile_invalidates_existing_cache(client):
 @pytest.mark.asyncio
 async def test_delete_user_invalidates_existing_cache(client):
     # Logging in as new user
-    headers = await get_token_from_logged_user(client, username="caching_user_profile")
+    headers = await get_token_from_logged_user(client, username="user_profile_delete")
     url = "/users/me"
 
     # Making the first request to get inside redis
@@ -132,7 +150,7 @@ async def test_create_room_invalidates_all_rooms_cache(client):
 @pytest.mark.asyncio
 async def test_view_all_rooms_saves_to_cache(client):
     # 1. Log in a user
-    headers = await get_token_from_logged_user(client, username="cache_user")
+    headers = await get_token_from_logged_user(client, username="cache_view_all_rooms")
     url = "/rooms/"
 
     # 2. First GET request hits the database and saves the data to Redis cache
@@ -155,11 +173,12 @@ async def test_view_all_rooms_saves_to_cache(client):
 # --------- STORAGE TEST: Checks if GET request saves a single room to Redis cache ------- #
 @pytest.mark.asyncio
 async def test_view_single_room_saves_to_cache(client):
-    # Logging in as a new user
-    headers = await get_token_from_logged_user(client)
+    # Short unique username to pass Pydantic validation length constraints
+    sender_data = await get_sender_id(client, username="cache_room_sing")
+    headers = {"Authorization": sender_data["Authorization"]}
 
-    # Getting the room id
-    room_id = await get_room_id(client)
+    # Explicitly passing a unique room name
+    room_id = await get_room_id(client, headers=headers, room_name="room_sing")
     url = f"/rooms/{room_id}"
 
     # 3. First GET request hits the database and populates Redis
@@ -182,8 +201,9 @@ async def test_view_single_room_saves_to_cache(client):
 @pytest.mark.asyncio
 async def test_update_room_invalidates_cache(client):
     # 1. Log in user and create a room
-    headers = await get_token_from_logged_user(client)
-    room_id = await get_room_id(client)
+    headers = await get_token_from_logged_user(client, username="cache_update_room")
+    # Explicitly passing a unique room name
+    room_id = await get_room_id(client, headers=headers, room_name="room_upd")
 
     single_url = f"/rooms/{room_id}"
     list_url = "/rooms/"
@@ -223,8 +243,9 @@ async def test_update_room_invalidates_cache(client):
 @pytest.mark.asyncio
 async def test_delete_room_invalidates_cache(client):
     # 1. Log in user and create a room
-    headers = await get_token_from_logged_user(client)
-    room_id = await get_room_id(client)
+    headers = await get_token_from_logged_user(client, username="cache_delete_room")
+    # Explicitly passing a unique room name
+    room_id = await get_room_id(client, headers=headers, room_name="room_del")
 
     single_url = f"/rooms/{room_id}"
     list_url = "/rooms/"
@@ -263,12 +284,30 @@ async def test_delete_room_invalidates_cache(client):
 
 # --------- STORAGE TEST: Checks if GET request saves the message list to Redis cache ------- #
 @pytest.mark.asyncio
-async def test_get_messages_saves_to_cache(client):
-    # 1. Log in user and create a room
-    headers = await get_token_from_logged_user(client)
-    room_id = await get_room_id(client, headers=headers)
+async def test_get_messages_saves_to_cache(client, monkeypatch):
+    # Log in user safely and create a room
+    sender_data = await get_sender_id(client, username="cache_msg_saves")
+    headers = {"Authorization": sender_data["Authorization"]}
+    
+    # Explicitly passing a unique room name
+    room_id = await get_room_id(client, headers=headers, room_name="room_msg_save")
 
-    base_url = f"/messages/?room_id={room_id}&sender_id=1"
+    # --- OVERRIDING GLOBAL EMPTY MOCK FOR THIS TEST --- #
+    fake_messages = [
+        {
+            "message_id": 1, 
+            "content": "Hello", 
+            "room_id": room_id, 
+            "sender_id": sender_data["user_id"], # Matches dynamically now
+            "sent_at": "2026-06-30T12:00:00"
+        }
+    ]
+    async def mock_with_data(*args, **kwargs):
+        return fake_messages
+    monkeypatch.setattr(MessageService, "get_all_sent_messages_by_room_id", mock_with_data)
+    # ------------------------------------------------
+
+    base_url = f"/messages/?room_id={room_id}&sender_id={sender_data['user_id']}"
     get_url = f"/messages/?room_id={room_id}"
     payload = {"content": "Hello"}
 
@@ -294,10 +333,20 @@ async def test_get_messages_saves_to_cache(client):
 
 # --------- STORAGE TEST: Checks if GET request handles empty message lists without crashing cache loop ------- #
 @pytest.mark.asyncio
-async def test_get_messages_handles_empty_list_cache(client):
-    # 1. Log in user and create a brand-new empty room
-    headers = await get_token_from_logged_user(client)
-    room_id = await get_room_id(client, headers=headers)
+async def test_get_messages_handles_empty_list_cache(client, monkeypatch):
+    # 1. Loggin in freshly and getting the auth 
+    sender_data = await get_sender_id(client, username="cache_msg_empty")
+    headers = {"Authorization": sender_data["Authorization"]}
+
+    # Creating an empty room here
+    room_res = await client.post("/rooms/", json={"room_name": "unique_empty_room"}, headers=headers)
+    room_id = room_res.json()["room_id"]
+
+    # --- ISOLATION MOCK: Clear database leak for this room ---
+    async def mock_empty_list(*args, **kwargs):
+        return []
+    monkeypatch.setattr(MessageService, "get_all_sent_messages_by_room_id", mock_empty_list)
+    # ---------------------------------------------------------
 
     get_url = f"/messages/?room_id={room_id}"
 
@@ -321,11 +370,14 @@ async def test_get_messages_handles_empty_list_cache(client):
 # --------- INVALIDATION TEST: Checks if POST request deletes the message list cache from Redis ------- #
 @pytest.mark.asyncio
 async def test_create_message_invalidates_cache(client):
-    # 1. Log in user and create a room
-    headers = await get_token_from_logged_user(client)
-    room_id = await get_room_id(client, headers=headers)
+    # Short unique username to pass Pydantic validation length constraints
+    sender_data = await get_sender_id(client, username="cache_msg_inv")
+    headers = {"Authorization": sender_data["Authorization"]}
+    
+    # Explicitly passing a unique room name
+    room_id = await get_room_id(client, headers=headers, room_name="room_msg_inv")
 
-    base_url = f"/messages/?room_id={room_id}&sender_id=1"
+    base_url = f"/messages/?room_id={room_id}&sender_id={sender_data['user_id']}"
     get_url = f"/messages/?room_id={room_id}"
     payload = {"content": "Hello"}
 
@@ -336,11 +388,11 @@ async def test_create_message_invalidates_cache(client):
     post_res = await client.post(base_url, json=payload, headers=headers)
     assert post_res.status_code == status.HTTP_201_CREATED
 
-    # 4. Setting the database trap on the message service layer method
+    # 4. Setting the database trap on the message message service layer method
     with patch(
-            "app.modules.messages.message_service.MessageService.get_all_sent_messages_by_room_id",
-            new_callable=AsyncMock,
-            side_effect=Exception("Cache was successfully deleted and database was targeted!")
+        "app.modules.messages.message_service.MessageService.get_all_sent_messages_by_room_id",
+        new_callable=AsyncMock,
+        side_effect=Exception("Cache was successfully deleted and database was targeted!")
     ):
         # 5. Subsequent GET request must miss cache and crash into the database trap
         with pytest.raises(Exception, match="Cache was successfully deleted and database was targeted!"):

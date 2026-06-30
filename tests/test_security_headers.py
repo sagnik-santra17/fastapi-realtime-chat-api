@@ -20,5 +20,8 @@ async def test_security_headers_are_present(client):
     assert response.headers["X-Frame-Options"] == "DENY"
     assert response.headers["X-Content-Type-Options"] == "nosniff"
     assert response.headers["Strict-Transport-Security"] == "max-age=31536000; includeSubDomains"
-    assert response.headers["Content-Security-Policy"] == "default-src 'self';"
+    
+    # Use 'in' instead of '==' to allow for additional policy rules (like script-src, style-src)
+    assert "default-src 'self';" in response.headers["Content-Security-Policy"]
+    
     assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"

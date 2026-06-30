@@ -3,16 +3,27 @@ import pytest
 from fastapi.testclient import TestClient
 from jose import jwt
 from fastapi.websockets import WebSocketDisconnect
+import asyncio
 
 # Local imports
 from app.main import app
 from app.core.config import settings
 from app.api.dependencies import get_message_dependency
+from app.api.dependencies import redis_client
+from app.core.database import async_engine
 
-# --------- Building a client that captures the mock settings --------- #
-@pytest.fixture
+# --------- Building a client that handles WebSocket upgrades --------- #
+@pytest.fixture(scope="session", autouse=True)
+async def reset_db_and_redis():
+    # Await the coroutines to properly disconnect/dispose
+    await redis_client.connection_pool.disconnect()
+    await async_engine.dispose()
+    yield
+
+@pytest.fixture(scope="session")
 def client():
-    return TestClient(app)
+    with TestClient(app) as c:
+        yield c
 
 # -------------- Creating a fake version of your database service --------- #
 class MockMessageService:
@@ -23,10 +34,9 @@ class MockMessageService:
 def setup_websocket_mock():
     # Swapping the real database tool with our fake mock tool
     app.dependency_overrides[get_message_dependency] = get_mock_message_service
-
     yield # Runs the actual test right here
 
-    # Removes the fake tool after testing so other files can use the real database normally
+    # Removes the fake tool after testing
     app.dependency_overrides.clear()
 
 # ----------- The function that hands out the fake service --------- #
@@ -38,42 +48,27 @@ def get_mock_message_service():
 # ------------ Successful connection --------- #
 def test_websocket_connection_success(client):
     token = {"sub": "1"}
-    valid_token = jwt.encode(
-        token,
-        settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM
-    )
+    valid_token = jwt.encode(token, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    
     with client.websocket_connect(f"/messages/ws/42?token={valid_token}") as websocket:
         assert websocket is not None
 
 # ------------ Sending and receiving live messages --------- #
 def test_websocket_send_and_receive(client):
     token = {"sub": "1"}
-    valid_token = jwt.encode(
-        token,
-        settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM
-    )
+    valid_token = jwt.encode(token, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
     with client.websocket_connect(f"/messages/ws/42?token={valid_token}") as websocket:
-        websocket.send_text(f"Hello, world!")
+        websocket.send_text("Hello, world!")
         message = websocket.receive_text()
         assert message == "User 1: Hello, world!"
 
 # ------------ Keeping different chat rooms separated --------- #
 def test_websocket_room_isolation(client):
     token_1 = {"sub": "1"}
-    valid_token_1 = jwt.encode(
-        token_1,
-        settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM
-    )
+    valid_token_1 = jwt.encode(token_1, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     token_2 = {"sub": "2"}
-    valid_token_2 = jwt.encode(
-        token_2,
-        settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM
-    )
+    valid_token_2 = jwt.encode(token_2, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
     with client.websocket_connect(f"/messages/ws/42?token={valid_token_1}") as ws_1:
         with client.websocket_connect(f"/messages/ws/99?token={valid_token_2}") as ws_2:
@@ -105,11 +100,7 @@ def test_websocket_connect_missing_token(client):
 # ------------ Blocking invalid room ID formats --------- #
 def test_websocket_connect_invalid_room_id_type(client):
     token = {"sub": "1"}
-    valid_token = jwt.encode(
-        token,
-        settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM
-    )
+    valid_token = jwt.encode(token, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     invalid_room_id = "invalid_room_id"
 
     with (pytest.raises(WebSocketDisconnect) as exception_info):

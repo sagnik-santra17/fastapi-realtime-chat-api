@@ -16,7 +16,6 @@ services:
       - .env
     environment:
       - REDIS_URL=redis://redis:6379
-      # We swapped 'localhost' with 'host.docker.internal' so Docker can talk to your database
-      - DATABASE_URL=postgresql+asyncpg://postgres:6156@host.docker.internal:5432/chat_db
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host.docker.internal:5432/${POSTGRES_DB}
     depends_on:
       - redis
