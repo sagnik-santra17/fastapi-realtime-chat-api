@@ -27,46 +27,64 @@ A modern backend architecture demonstrating clean software engineering principle
 
 # Real-Time Chat API
 
-An async backend for a multi-room chat app, built with FastAPI, WebSockets, PostgreSQL, and Redis. Users register, create or join rooms, and exchange messages over a persistent WebSocket connection that's backed by Redis pub/sub so it can run across more than one server process.
+An async backend for a multi-room chat app, built with FastAPI, WebSockets, PostgreSQL, and Redis. Users register, create or join rooms, and exchange messages over a persistent WebSocket connection.
+
+This was a personal project to learn how a real backend is structured beyond basic CRUD — async programming, authentication, caching, and real-time communication with WebSockets.
 
 **Stack:** Python 3.13 · FastAPI · SQLAlchemy 2.0 (async) · PostgreSQL · Redis · Alembic · JWT · Pytest
 
 ---
 
-## Why it's built this way
+## What it does
 
-**Layered architecture (router → service → repository → model).** Routes only handle HTTP/WebSocket concerns and call a service; services hold the business rules; repositories are the only thing that touches the database. This is mostly about testability — services can be unit tested against a mocked repository without spinning up Postgres, and it keeps a route handler from turning into a 100-line function that mixes validation, queries, and response shaping.
-
-**Redis pub/sub instead of broadcasting straight from the WebSocket handler.** The `ConnectionManager` that tracks open WebSocket connections lives in process memory, so it only knows about clients connected to *that* instance. If this API ever ran behind a load balancer with more than one worker, a message sent on instance A would never reach a client connected to instance B. Publishing every message to a Redis channel and having a background task (`live_messages`, started in the app's `lifespan`) consume it and re-broadcast locally solves that — every instance subscribes to the same channel, so it doesn't matter which one a given client landed on.
-
-**JWT over server-side sessions.** No session store to keep in sync across instances; the token carries everything the API needs to verify a request. The trade-off is no built-in revocation — a stolen token works until it expires, which is the main thing I'd address with a refresh-token + denylist setup if this went further.
-
-**Redis for caching and rate limiting, Postgres for everything that needs to survive a restart.** Message history is cached for 5 minutes per room and invalidated on write. Per-user rate limiting (5 requests / 10 seconds) is applied to both sending a message over the WebSocket and the REST `POST /messages` endpoint, using a Redis counter with a TTL.
+- Users can register and log in (JWT-based auth, passwords hashed with bcrypt)
+- Users can create chat rooms and view/update/delete the ones they own
+- Inside a room, users connect over a WebSocket and send/receive messages live
+- Message history is stored in PostgreSQL and cached in Redis for faster repeat reads
+- Basic rate limiting stops one user from spamming messages
 
 ---
 
-## Project structure
+## How it's structured
+
+I split the app into layers instead of putting everything in the route functions:
+
+```
+Router    → handles the HTTP/WebSocket request itself
+Service   → the actual logic (e.g., "can this user delete this room?")
+Repository → the only place that talks to the database
+Model     → the database table definition
+```
+
+The main reason I did it this way: it's much easier to test. A service can be tested by giving it a fake repository instead of needing a real database running, and a route function stays short because it just calls a service and returns the result.
 
 ```
 app/
-├── main.py                 # app setup, middleware, lifespan (starts the Redis listener)
-├── redis_client.py         # background task: consumes the Redis channel, persists + broadcasts
-├── core/
-│   ├── config.py            # settings from environment variables
-│   ├── database.py          # async SQLAlchemy engine/session
-│   └── security.py          # password hashing, JWT creation
-├── api/
-│   └── dependencies.py      # auth dependency, rate limiter, cache helpers, service injection
+├── main.py                 # app setup, middleware
+├── redis_client.py         # background task that listens for new messages and broadcasts them
+├── core/                   # config, database connection, JWT/password logic
+├── api/dependencies.py     # auth check, rate limiter, cache helpers
 ├── modules/
 │   ├── users/                # register, login, profile
 │   ├── rooms/                 # create/update/delete/list rooms
-│   └── messages/              # REST message history + the WebSocket endpoint
+│   └── messages/              # message history + the WebSocket endpoint
 └── utils/                    # shared validation helpers
 
-tests/                        # ~1,800 lines covering auth, rooms, messages, caching,
-                               # rate limiting, the WebSocket flow, and the Redis worker
+tests/                        # tests for auth, rooms, messages, caching, rate limiting, websockets
 alembic/                      # database migrations
 ```
+
+---
+
+## Why Redis is in here, not just Postgres
+
+This is the part I'm most proud of figuring out. WebSocket connections are tracked in memory while the server is running — there's a dictionary mapping each chat room to the list of users currently connected to it. That works fine for one server.
+
+But if this app ever ran on two servers at once (which is normal for handling more traffic), each server would only know about *its own* connected users. A message sent on Server 1 would never reach a user connected to Server 2.
+
+To fix that, instead of broadcasting a message directly, the WebSocket handler publishes it to a Redis channel. A background task (started when the app starts up) listens to that channel, saves the message to Postgres, and then broadcasts it to whichever users are connected to *that* server. Every server runs this same background task and listens to the same channel, so it doesn't matter which server a user happens to be connected to — they all hear everything published.
+
+Redis is also used for two smaller things: caching the last 50 messages of a room for 5 minutes (so repeated requests don't hit Postgres every time), and counting how many messages a user has sent recently for rate limiting.
 
 ---
 
@@ -93,27 +111,27 @@ ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REDIS_URL=redis://localhost:6379
 
-# optional — only needed if you want the welcome email on signup
+# optional — only needed for the welcome email on signup
 GMAIL_USER=
 GMAIL_APP_PASSWORD=
 ```
 
-Then apply migrations and start the server:
+Apply migrations and start the server:
 
 ```bash
 alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-The API is at `http://127.0.0.1:8000`, with interactive docs at `/docs`.
+API runs at `http://127.0.0.1:8000`, with interactive docs at `/docs`.
 
-To run Redis (and the app itself) in Docker instead:
+To run Redis (and the app) in Docker instead:
 
 ```bash
 docker compose up --build
 ```
 
-The compose file only containerizes Redis and the app — Postgres is expected to be running on the host (connected via `host.docker.internal`).
+The compose file containerizes Redis, and the app — Postgres is expected to already be running on the host machine.
 
 ---
 
@@ -130,11 +148,11 @@ The compose file only containerizes Redis and the app — Postgres is expected t
 - `PATCH /{room_id}`, `DELETE /{room_id}` — update or delete (room creator only)
 
 **Messages** (`/messages`)
-- `GET /?room_id=` — recent messages for a room (cached, paginated via `limit`)
+- `GET /?room_id=` — recent messages for a room (cached)
 - `POST /?room_id=` — send a message over REST
 - `WS /messages/ws/{room_id}?token=` — live connection; send plain text, receive every message broadcast to that room
 
-All routes except register/login require a `Bearer` token from `/users/login`. The WebSocket takes the same JWT as a query parameter, since the WebSocket handshake doesn't carry custom headers the way a normal request does.
+All routes except register/login require a `Bearer` token from `/users/login`. The WebSocket takes the same JWT as a query parameter instead of a header, since the WebSocket handshake doesn't let the browser attach custom headers.
 
 ---
 
@@ -144,17 +162,16 @@ All routes except register/login require a `Bearer` token from `/users/login`. T
 pytest -v
 ```
 
-Tests run against a separate test database and use `fakeredis` to avoid needing a real Redis instance, so the suite is self-contained. Coverage includes the auth flow, rate limiting behavior, cache hit/miss/invalidation, the WebSocket connect/send/disconnect cycle, and the background Redis worker that persists and rebroadcasts messages.
+Tests use a separate test database and `fakeredis`, so you don't need a real Redis instance running just to run the suite. They cover the auth flow, rate limiting, cache behavior, the WebSocket connect/send/disconnect cycle, and the background worker that saves and rebroadcasts messages.
 
 ---
 
-## Known limitations / what I'd do next
+## What I'd improve with more time
 
-- **No token revocation.** A logout or password change doesn't invalidate already-issued tokens. The next step would be to refresh tokens with a denylist in Redis.
-- **Cache invalidation is a wildcard `KEYS` delete**, which is fine at this scale but blocks Redis on a large keyspace. `SCAN` is the production-correct version.
-- **Rate limiter's increment-then-expire isn't atomic** — a process crash between the two Redis calls could leave a counter without a TTL. A small Lua script would close that gap.
-- **No read receipts, presence, or message editing/deletion** — the schema and service layer were left open enough to add these without restructuring, but they're not built.
-- **Horizontal scaling is solved for fan-out (via Redis pub/sub) but not yet load-tested** — I haven't pushed this past a handful of concurrent connections locally.
+- **Logging out doesn't actually invalidate a token.** Since JWTs are just verified, not looked up anywhere, a token keeps working until it naturally expires (30 min by default), even after "logout." A proper fix needs a way to track revoked tokens server-side.
+- **Cache invalidation uses Redis's `KEYS` command with a wildcard**, which scans every key in Redis to find matches. Fine for this project's size, but on a much bigger dataset it would briefly block all other Redis operations. `SCAN` does the same job in smaller, non-blocking chunks.
+- **The rate limiter increments a counter and sets its expiry as two separate Redis commands**, not one atomic step. If the app crashed in between those two calls, that counter could be left without an expiry and never reset. I'd want to combine those into a single script-based command.
+- **No presence, typing indicators, or read receipts** — the layered structure should make these easier to add later without rewriting things, but they're not built yet.
 
 ---
 
