@@ -80,15 +80,17 @@ alembic/                      # database migrations
 
 This is the part I'm most proud of figuring out. WebSocket connections are tracked in memory while the server is running — there's a dictionary mapping each chat room to the list of users currently connected to it. That works fine for one server.
 
-But if this app ever ran on two servers at once (which is normal for handling more traffic), each server would only know about *its own* connected users. A message sent on Server 1 would never reach a user connected to Server 2.
+But if this app ever ran on two servers at once (which is normal for handling more traffic), each server would only know about _its own_ connected users. A message sent on Server 1 would never reach a user connected to Server 2.
 
-To fix that, instead of broadcasting a message directly, the WebSocket handler publishes it to a Redis channel. A background task (started when the app starts up) listens to that channel, saves the message to Postgres, and then broadcasts it to whichever users are connected to *that* server. Every server runs this same background task and listens to the same channel, so it doesn't matter which server a user happens to be connected to — they all hear everything published.
+To fix that, instead of broadcasting a message directly, the WebSocket handler publishes it to a Redis channel. A background task (started when the app starts up) listens to that channel, saves the message to Postgres, and then broadcasts it to whichever users are connected to _that_ server. Every server runs this same background task and listens to the same channel, so it doesn't matter which server a user happens to be connected to — they all hear everything published.
 
 Redis is also used for two smaller things: caching the last 50 messages of a room for 5 minutes (so repeated requests don't hit Postgres every time), and counting how many messages a user has sent recently for rate limiting.
 
 ---
 
 ## Running it locally
+
+**Test Login**: `test@test.com` / `password123`
 
 **Prerequisites:** Python 3.13+, PostgreSQL, Redis (or just use Docker for Redis).
 
@@ -138,16 +140,19 @@ The compose file containerizes Redis, and the app — Postgres is expected to al
 ## API overview
 
 **Users** (`/users`)
+
 - `POST /` — register
 - `POST /login` — returns a JWT
 - `GET /me`, `PATCH /me`, `DELETE /me` — current user profile
 
 **Rooms** (`/rooms`)
+
 - `POST /` — create a room
 - `GET /`, `GET /{room_id}` — list/view rooms
 - `PATCH /{room_id}`, `DELETE /{room_id}` — update or delete (room creator only)
 
 **Messages** (`/messages`)
+
 - `GET /?room_id=` — recent messages for a room (cached)
 - `POST /?room_id=` — send a message over REST
 - `WS /messages/ws/{room_id}?token=` — live connection; send plain text, receive every message broadcast to that room
