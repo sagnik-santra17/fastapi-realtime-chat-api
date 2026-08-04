@@ -10,7 +10,7 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 logger.info("Initializing database...")
-async_engine = create_async_engine(settings.DATABASE_URL)
+async_engine = create_async_engine(settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"))
 
 AsyncSessionLocal = async_sessionmaker(
     bind=async_engine,
