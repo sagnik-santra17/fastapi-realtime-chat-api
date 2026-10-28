@@ -3,8 +3,13 @@ import asyncio
 import logging
 import time
 import json
+import sys
+
+
 from contextlib import asynccontextmanager
 import redis.asyncio as aioredis
+
+
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,10 +21,11 @@ from app.modules.users.user_model import User
 from app.modules.rooms.room_model import Room
 from app.modules.messages.message_model import Message
 from app.redis_client import live_messages
+from app.core.config import settings
 
 #-----------logging setup-----------#
 logging.basicConfig(
-    filename="app.log",
+    stream=sys.stdout,
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
@@ -41,16 +47,9 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="Chat-room API", lifespan=lifespan)
 
 #---------middleware----------#
-origins = [
-    "http://localhost.tiangolo.com",
-    "https://localhost.tiangolo.com",
-    "http://localhost",
-    "http://localhost:8080",
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
