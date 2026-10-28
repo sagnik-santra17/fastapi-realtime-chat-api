@@ -40,7 +40,7 @@ jobs:
           ACCESS_TOKEN_EXPIRE_MINUTES: 30
           DATABASE_URL: "sqlite+aiosqlite:///:memory:"
           REDIS_URL: "redis://localhost:6379"
-        run: python -m pytest
+        run: python -m pytest --timeout=15
 
       - name: Build Docker Image
         run: docker build -t chat-api-test .
