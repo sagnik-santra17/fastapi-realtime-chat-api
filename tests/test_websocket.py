@@ -3,7 +3,6 @@ import pytest
 from fastapi.testclient import TestClient
 from jose import jwt
 from fastapi.websockets import WebSocketDisconnect
-import asyncio
 
 # Local imports
 from app.main import app
@@ -55,6 +54,8 @@ def test_websocket_connection_success(client):
 
 # ------------ Sending and receiving live messages --------- #
 def test_websocket_send_and_receive(client):
+    # Note: The database is now seeded automatically by conftest.py
+    
     token = {"sub": "1"}
     valid_token = jwt.encode(token, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 

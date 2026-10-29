@@ -1,3 +1,7 @@
+# Force the app to use the test database BEFORE importing anything else
+import os
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_database.db"
+
 # Global imports
 import pytest
 import pytest_asyncio
@@ -8,6 +12,7 @@ from app.core.database import get_db
 from app.main import app
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker, AsyncEngine
 from app.core.database import Base
+from sqlalchemy import select
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///./test_database.db"
 
@@ -31,6 +36,24 @@ async def setup_database():
     yield
     async with test_async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+
+# Seed the database with the rooms and users the tests expect
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def seed_test_data(setup_database):
+    async with TestAsyncSessionLocal() as session:
+        # Import models inside the fixture to avoid circular imports
+        from app.modules.users.user_model import User
+        from app.modules.rooms.room_model import Room
+        
+        # Check if users already exist
+        res = await session.execute(select(User).where(User.user_id == 1))
+        if not res.scalar_one_or_none():
+            session.add(User(user_id=1, username="user1", email="u1@test.com", hashed_password="hash", is_active=True))
+            session.add(User(user_id=2, username="user2", email="u2@test.com", hashed_password="hash", is_active=True))
+            session.add(Room(room_id=42, room_name="Room 42", creator_id=1))
+            session.add(Room(room_id=99, room_name="Room 99", creator_id=2))
+            await session.commit()
+    yield
 
 # Database session fixture - aligned to session scope
 @pytest_asyncio.fixture(scope="session")

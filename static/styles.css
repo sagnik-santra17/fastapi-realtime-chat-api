@@ -1,0 +1,262 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family:
+    "Segoe UI",
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+body {
+  background-color: #121212;
+  color: #e5e7eb;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------- Auth Screens (Login & Signup) ---------- */
+#login-container {
+  background: #1e1e1e;
+  padding: 40px;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  animation: fadeIn 0.4s ease-out;
+}
+
+#login-container h1 {
+  text-align: center;
+  margin-bottom: 24px;
+  font-weight: 600;
+  font-size: 24px;
+}
+
+#login-form,
+#signup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+#login-form label,
+#signup-form label {
+  font-size: 13px;
+  color: #9ca3af;
+  margin-bottom: -8px;
+}
+
+input {
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #2a2a2a;
+  color: white;
+  outline: none;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+button {
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: none;
+  background: #6366f1;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    transform 0.1s ease;
+}
+
+button:hover {
+  background: #4f46e5;
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+/* Toggle Text (Sign up / Login links) */
+.toggle-text {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 14px;
+  color: #9ca3af;
+}
+
+.toggle-text span {
+  color: #6366f1;
+  cursor: pointer;
+  font-weight: 600;
+  transition: color 0.2s ease;
+}
+
+.toggle-text span:hover {
+  color: #4f46e5;
+  text-decoration: underline;
+}
+
+/* ---------- Chat Layout ---------- */
+#chat-container {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  animation: fadeIn 0.4s ease-out;
+}
+
+/* ---------- Sidebar ---------- */
+#room-list {
+  width: 280px;
+  background: #1e1e1e;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #333;
+}
+
+#room-list h2 {
+  font-weight: 600;
+  font-size: 18px;
+  margin-bottom: 16px;
+}
+
+#room-list ul {
+  list-style: none;
+  flex: 1;
+  overflow-y: auto;
+  margin-bottom: 16px;
+}
+
+#room-list li {
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  background: #2a2a2a;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    transform 0.1s ease;
+}
+
+#room-list li:hover {
+  background: #333;
+  transform: translateX(4px);
+}
+
+#create-room-button {
+  background: #10b981;
+}
+
+#create-room-button:hover {
+  background: #059669;
+}
+
+/* ---------- Chat Window ---------- */
+#chat-window {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #121212;
+}
+
+#chat-window h2 {
+  padding: 24px;
+  border-bottom: 1px solid #333;
+  font-weight: 600;
+  font-size: 18px;
+  margin: 0;
+}
+
+#messages-container {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ---------- Chat Bubbles ---------- */
+.message {
+  max-width: 75%;
+  padding: 12px 18px;
+  border-radius: 16px;
+  line-height: 1.5;
+  font-size: 15px;
+  animation: slideUp 0.2s ease-out;
+}
+
+.message.mine {
+  background: #6366f1;
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+}
+
+.message.other {
+  background: #2a2a2a;
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+}
+
+/* ---------- Input Area ---------- */
+#message-form {
+  padding: 20px 24px;
+  display: flex;
+  gap: 12px;
+  border-top: 1px solid #333;
+  background: #1a1a1a;
+}
+
+#message-form input {
+  flex: 1;
+  border-radius: 24px;
+  padding-left: 20px;
+}
+
+#message-form button {
+  border-radius: 24px;
+  padding: 12px 24px;
+}
+
+/* ---------- Animations ---------- */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -397,3 +397,6 @@ async def test_create_message_invalidates_cache(client):
         # 5. Subsequent GET request must miss cache and crash into the database trap
         with pytest.raises(Exception, match="Cache was successfully deleted and database was targeted!"):
             await client.get(get_url, headers=headers)
+
+
+

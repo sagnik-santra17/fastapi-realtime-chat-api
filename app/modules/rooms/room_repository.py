@@ -60,11 +60,10 @@ class RoomRepository:
         return room
 
     #---------get all chat rooms------------#
-    async def find_all_rooms(self, creator_id: int, skip: int=0, limit: int=20) -> Sequence[Room]: #added offset and limit
+    async def find_all_rooms(self, creator_id: int, skip: int=0, limit: int=20) -> Sequence[Room]: 
         logger.info("Database: Fetching all rooms")
         stmt = (
             select(Room)
-            .where(Room.creator_id == creator_id)
             .order_by(Room.room_id)
             .limit(limit)
             .offset(skip)

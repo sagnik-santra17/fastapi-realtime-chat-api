@@ -13,6 +13,8 @@ import redis.asyncio as aioredis
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
 #local imports
 from app.modules.rooms.room_router import router as room_router
 from app.modules.users.user_router import router as user_router
@@ -101,6 +103,8 @@ async def global_http_exception_handler(request: Request, exc: HTTPException):
 app.include_router(user_router)
 app.include_router(room_router)
 app.include_router(message_router)
+
+app.mount("/static", StaticFiles(directory="static", html=True), name="static") # -> Frontend
 
 @app.get("/")
 async def root():
