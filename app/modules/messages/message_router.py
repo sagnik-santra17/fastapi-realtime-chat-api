@@ -10,7 +10,6 @@ from app.api.dependencies import get_current_user, message_service_dependency, R
 from app.core.config import settings
 from app.modules.messages.message_schema import MessageResponse, MessageCreate
 from app.modules.messages.connection_manager import manager
-from app.core.config import settings
 
 router = APIRouter(prefix="/messages", tags=["Messages"])
 
@@ -71,7 +70,7 @@ async def get_messages(
     return messages_model
 
 
-# --------- WebSocker Router ------- #
+# --------- WebSocket Router ------- #
 # Creating a strict rule websocket: max 5 tries every 10 seconds
 ws_limiter = RateLimiter(max_requests=5, window_seconds=10)
 
@@ -126,21 +125,28 @@ async def websocket_endpoint(
                 await websocket.send_text("System: You are typing too fast! Message not sent.")
                 continue  # Skip the lines below and jump back to the start of the loop
 
-            # Packing the REAL user data into a dictionary
+            # 1. Parse the incoming JSON from the frontend
+            try:
+                incoming_payload = json.loads(data)
+                message_content = incoming_payload.get("content", "")
+            except json.JSONDecodeError:
+                message_content = data # Fallback in case plain text is sent
+
+            # 2. Pack the REAL user data into a dictionary
             real_chat = {
                 "user_id": user_id,
                 "room_id": room_id,
-                "text": data
+                "content": message_content  # Fixed: Using "content" instead of "text"
             }
 
             # Turning the dictionary into a JSON string
             json_str = json.dumps(real_chat)
 
-            # Shouting the real message into Redis
+            # 3. Shouting the real message into Redis (for the database worker)
             await redis_client.publish("room:messages", json_str)
 
-            # Broadcasting the message to everyone connected to this room!
-            await manager.broadcast_to_room(room_id, json_str)
+            # 4. Broadcasting the message to everyone connected to this room!
+            await manager.broadcast(room_id, json_str)
 
     except WebSocketDisconnect:
         # If the user closes their browser tab, the line breaks and server gets disconnected

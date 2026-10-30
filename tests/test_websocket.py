@@ -1,5 +1,6 @@
 # Global imports
 import pytest
+import json # <-- ADDED THIS IMPORT
 from fastapi.testclient import TestClient
 from jose import jwt
 from fastapi.websockets import WebSocketDisconnect
@@ -62,7 +63,11 @@ def test_websocket_send_and_receive(client):
     with client.websocket_connect(f"/messages/ws/42?token={valid_token}") as websocket:
         websocket.send_text("Hello, world!")
         message = websocket.receive_text()
-        assert message == "User 1: Hello, world!"
+        
+        # CHANGED: Parse the JSON response
+        data = json.loads(message)
+        assert data["content"] == "Hello, world!"
+        assert data["user_id"] == 1
 
 # ------------ Keeping different chat rooms separated --------- #
 def test_websocket_room_isolation(client):
@@ -77,7 +82,11 @@ def test_websocket_room_isolation(client):
             ws_2.send_text(f"Message to room 99")
 
             message = ws_2.receive_text()
-            assert message == "User 2: Message to room 99"
+            
+            # CHANGED: Parse the JSON response
+            data = json.loads(message)
+            assert data["content"] == "Message to room 99"
+            assert data["user_id"] == 2
 
 
 # -------------- sad path tests ----------------#
