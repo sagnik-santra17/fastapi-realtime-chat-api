@@ -161,9 +161,13 @@ async function connectToRoom(roomId, roomName) {
     if (res.ok) {
       const pastMessages = await res.json();
       pastMessages.forEach((msg) => {
-        // If the sender_id matches our userId, color it 'mine'
         const isMine = parseInt(msg.sender_id) === parseInt(userId);
-        addMessage(msg.content, isMine ? "mine" : "other");
+
+        // Format: "You: Message" or "User [id]: Message" for history
+        const senderName = isMine ? "You" : `User ${msg.sender_id}`;
+        const displayText = `${senderName}: ${msg.content}`;
+
+        addMessage(displayText, isMine ? "mine" : "other");
       });
     }
   } catch (err) {
@@ -179,10 +183,13 @@ async function connectToRoom(roomId, roomName) {
   // 3. LISTEN FOR INCOMING MESSAGES
   currentSocket.onmessage = (event) => {
     const data = JSON.parse(event.data);
-
-    // Check if this new message was sent by us or someone else
     const isMine = parseInt(data.user_id) === parseInt(userId);
-    addMessage(data.content, isMine ? "mine" : "other");
+
+    // Format: "You: Message" or "Sus: Message"
+    const senderName = isMine ? "You" : data.username;
+    const displayText = `${senderName}: ${data.content}`;
+
+    addMessage(displayText, isMine ? "mine" : "other");
   };
 }
 
@@ -196,8 +203,7 @@ messageForm.addEventListener("submit", (e) => {
   const text = messageInput.value.trim();
   if (!text) return;
 
-  // Send to server. We DON'T add it to the screen here.
-  // The server will broadcast it back, and the listener above will display it.
+  // Send to server. The server broadcasts it back, and the listener above displays it.
   currentSocket.send(JSON.stringify({ content: text }));
   messageInput.value = "";
 });

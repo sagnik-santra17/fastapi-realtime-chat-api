@@ -4,12 +4,15 @@ import logging
 import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, status, Query, WebSocket, WebSocketDisconnect, HTTPException
 from jose import jwt, JWTError
+from sqlalchemy import select # <-- ADDED FOR DATABASE QUERY
 
 # Local imports
 from app.api.dependencies import get_current_user, message_service_dependency, RateLimiter, delete_cache, get_cache, set_cache
 from app.core.config import settings
+from app.core.database import AsyncSessionLocal # <-- ADDED FOR DATABASE SESSION
 from app.modules.messages.message_schema import MessageResponse, MessageCreate
 from app.modules.messages.connection_manager import manager
+from app.modules.users.user_model import User # <-- ADDED FOR USER MODEL
 
 router = APIRouter(prefix="/messages", tags=["Messages"])
 
@@ -103,6 +106,14 @@ async def websocket_endpoint(
         logger.warning(f"Connection rejected: Invalid token for room_id: {room_id}")
         return
 
+    # Fetch the username from the database
+    username = f"User {user_id}"
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(User).where(User.user_id == user_id))
+        user = result.scalar_one_or_none()
+        if user:
+            username = str(user.username)
+
     # If the token is perfect, connect them to the room!
     await manager.connect(room_id=room_id, websocket=websocket)
     logger.info(f"User {user_id} successfully connected live to room {room_id}")
@@ -135,8 +146,9 @@ async def websocket_endpoint(
             # 2. Pack the REAL user data into a dictionary
             real_chat = {
                 "user_id": user_id,
+                "username": username,
                 "room_id": room_id,
-                "content": message_content  # Fixed: Using "content" instead of "text"
+                "content": message_content
             }
 
             # Turning the dictionary into a JSON string
