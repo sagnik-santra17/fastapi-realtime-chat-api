@@ -139,6 +139,9 @@ async def websocket_endpoint(
             # Shouting the real message into Redis
             await redis_client.publish("room:messages", json_str)
 
+            # Broadcasting the message to everyone connected to this room!
+            await manager.broadcast_to_room(room_id, json_str)
+
     except WebSocketDisconnect:
         # If the user closes their browser tab, the line breaks and server gets disconnected
         logger.info(f"User {user_id} disconnected from room {room_id}")
