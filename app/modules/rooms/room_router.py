@@ -28,8 +28,8 @@ async def create_room(
 
     new_room = await service.create_room(room=data, creator_id=current_user.user_id)
 
-    # Deleting the old rooms' cache
-    all_rooms_key = f"rooms:all:{current_user.user_id}:*"
+    # Deleting the old rooms' cache globally so EVERYONE sees the new room
+    all_rooms_key = f"rooms:all:*"  # <--- CHANGED THIS
     await delete_cache(all_rooms_key)
 
     return new_room
@@ -58,8 +58,8 @@ async def delete_room(
     single_room_key = f"rooms:single:{room_id}"
     await delete_cache(single_room_key)
 
-    #Deleting the all the old rooms to refresh the room list
-    all_rooms_key = f"rooms:all:{current_user.user_id}:*"
+    #Deleting the all the old rooms to refresh the room list globally
+    all_rooms_key = f"rooms:all:*" # <--- CHANGED THIS
     await delete_cache(all_rooms_key)
 
     return {"message": f"Room has been deleted successfully!"}
@@ -89,8 +89,8 @@ async def update_room(
     single_room_key = f"rooms:single:{room_id}"
     await delete_cache(single_room_key)
 
-    #Deleting the all the old rooms to refresh the room list
-    all_rooms_key = f"rooms:all:{current_user.user_id}:*"
+    #Deleting the all the old rooms to refresh the room list globally
+    all_rooms_key = f"rooms:all:*" # <--- CHANGED THIS
     await delete_cache(all_rooms_key)
 
     return updated_room
@@ -133,8 +133,8 @@ async def view_all_rooms(
 ):
     safe_limit = min(limit, 100)
 
-    # Creating a completely unique cache key for the rooms
-    cache_key = f"rooms:all:{current_user.user_id}:skip:{skip}:limit:{safe_limit}"
+    # Creating a global cache key for the rooms (removed user_id)
+    cache_key = f"rooms:all:skip:{skip}:limit:{safe_limit}" # <--- CHANGED THIS
 
     # ---- 1. CHECKING CACHE FIRST (Cache Hit - Checking if the data is in Redis already) ---- #
     cached_room = await get_cache(cache_key)

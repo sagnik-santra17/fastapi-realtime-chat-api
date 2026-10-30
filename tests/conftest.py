@@ -7,6 +7,8 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
+from unittest.mock import patch
+
 # Local imports
 from app.core.database import get_db
 from app.main import app
@@ -80,3 +82,10 @@ async def clear_redis():
     from app.api.dependencies import redis_client
     await redis_client.flushdb()
     yield
+
+
+# This stops the app from actually trying to connect to Gmail during tests
+@pytest_asyncio.fixture(autouse=True)
+def mock_email_sending():
+    with patch("app.modules.users.user_router.send_email_notification") as mock:
+        yield mock
