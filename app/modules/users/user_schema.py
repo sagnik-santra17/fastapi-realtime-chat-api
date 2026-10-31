@@ -8,7 +8,7 @@ class UserCreate(BaseModel):
     email: EmailStr = Field(...)
     password: str = Field(..., min_length=8, max_length=100)
     confirm_password: str = Field(..., min_length=8, max_length=100)
-    is_active: bool = Field(...)
+    is_active: bool = True
 
     #Validating password and confirm password while creating user
     @model_validator(mode="after")

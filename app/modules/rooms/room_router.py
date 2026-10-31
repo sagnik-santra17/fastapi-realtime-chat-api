@@ -4,7 +4,7 @@ from fastapi import APIRouter, status, Depends, Path, Query
 # Local imports
 from app.api.dependencies import get_current_user, room_service_dependency, RateLimiter, delete_cache, get_cache, \
     set_cache
-from app.modules.rooms.room_schema import RoomResponse, RoomCreate, RoomDelete, RoomUpdate
+from app.modules.rooms.room_schema import RoomResponse, RoomCreate, RoomUpdate # <-- Removed RoomDelete
 
 if TYPE_CHECKING:
     from app.modules.users.user_model import User
@@ -29,7 +29,7 @@ async def create_room(
     new_room = await service.create_room(room=data, creator_id=current_user.user_id)
 
     # Deleting the old rooms' cache globally so EVERYONE sees the new room
-    all_rooms_key = f"rooms:all:*"  # <--- CHANGED THIS
+    all_rooms_key = f"rooms:all:*"
     await delete_cache(all_rooms_key)
 
     return new_room
@@ -40,10 +40,10 @@ deleting_room_limiter = RateLimiter(max_requests=5, window_seconds=60)
 
 @router.delete("/{room_id}", status_code=status.HTTP_200_OK)
 async def delete_room(
-    delete_data: RoomDelete,
     current_user: logged_user,
     service: room_service_dependency,
-    room_id: int=Path(..., gt=0)
+    room_id: int=Path(..., gt=0),
+    current_password: str = Query(..., description="Enter your current password to delete this chatroom")
 ):
     # This tracks how many times rooms are deleted
     await deleting_room_limiter.check_rate_limit(user_id=current_user.user_id)
@@ -51,7 +51,7 @@ async def delete_room(
     await service.delete_room(
         room_id=room_id,
         creator_id=current_user.user_id,
-        current_password=delete_data.current_password
+        current_password=current_password # <--- FIXED: Changed from delete_data.current_password
     )
 
     # Deleting the old room's cache
@@ -59,7 +59,7 @@ async def delete_room(
     await delete_cache(single_room_key)
 
     #Deleting the all the old rooms to refresh the room list globally
-    all_rooms_key = f"rooms:all:*" # <--- CHANGED THIS
+    all_rooms_key = f"rooms:all:*"
     await delete_cache(all_rooms_key)
 
     return {"message": f"Room has been deleted successfully!"}
@@ -90,7 +90,7 @@ async def update_room(
     await delete_cache(single_room_key)
 
     #Deleting the all the old rooms to refresh the room list globally
-    all_rooms_key = f"rooms:all:*" # <--- CHANGED THIS
+    all_rooms_key = f"rooms:all:*"
     await delete_cache(all_rooms_key)
 
     return updated_room
@@ -134,7 +134,7 @@ async def view_all_rooms(
     safe_limit = min(limit, 100)
 
     # Creating a global cache key for the rooms (removed user_id)
-    cache_key = f"rooms:all:skip:{skip}:limit:{safe_limit}" # <--- CHANGED THIS
+    cache_key = f"rooms:all:skip:{skip}:limit:{safe_limit}"
 
     # ---- 1. CHECKING CACHE FIRST (Cache Hit - Checking if the data is in Redis already) ---- #
     cached_room = await get_cache(cache_key)

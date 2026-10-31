@@ -124,13 +124,8 @@ signupForm.addEventListener("submit", async (e) => {
     const res = await fetch(`${API_URL}/users/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username,
-        email,
-        password,
-        confirm_password,
-        is_active: true,
-      }),
+      // FIXED: Removed is_active from the payload
+      body: JSON.stringify({ username, email, password, confirm_password }),
     });
 
     if (res.ok) {
@@ -190,7 +185,10 @@ async function fetchRooms() {
       const rooms = await res.json();
       const roomArray = Array.isArray(rooms) ? rooms : rooms.rooms || [];
 
-      if (roomList.children.length !== roomArray.length) {
+      // FIXED: Check if the actual string of room names changed to force a UI update
+      const newListStr = roomArray.map((r) => r.room_name).join(",");
+      if (roomList.dataset.str !== newListStr) {
+        roomList.dataset.str = newListStr;
         roomList.innerHTML = "";
         roomArray.forEach((room) => {
           const li = document.createElement("li");
@@ -240,7 +238,7 @@ async function connectToRoom(roomId, roomName, creatorId) {
       } else {
         pastMessages.forEach((msg) => {
           const isMine = parseInt(msg.sender_id) === parseInt(userId);
-          // FIXED: Use the username sent from the backend history
+          // Use msg.username sent from the backend history
           const senderName = isMine
             ? "You"
             : msg.username || `User ${msg.sender_id}`;
@@ -377,14 +375,14 @@ deleteRoomBtn.addEventListener("click", async () => {
   setButtonLoading(deleteRoomBtn, true, "Deleting...");
 
   try {
-    const res = await fetch(`${API_URL}/rooms/${currentRoomId}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+    // FIXED: Sending password in the URL so Render doesn't strip it
+    const res = await fetch(
+      `${API_URL}/rooms/${currentRoomId}?current_password=${encodeURIComponent(currentPw)}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
       },
-      body: JSON.stringify({ current_password: currentPw }),
-    });
+    );
 
     if (res.ok) {
       alert("Room deleted successfully!");

@@ -46,9 +46,9 @@ async def test_create_room_success(client):
 async def test_delete_room_success(client):
     headers = await get_token_from_logged_user(client)
     room_id = await get_room_id(client, headers=headers, room_name=f"del_{time.time()}")
-    delete_data = {"current_password": "test_password123"}
-
-    response = await client.request("DELETE", f"/rooms/{room_id}", json=delete_data, headers=headers)
+    
+    # Sending password as a query parameter
+    response = await client.request("DELETE", f"/rooms/{room_id}?current_password=test_password123", headers=headers)
     assert response.status_code == 200
     assert response.json() == {"message": f"Room has been deleted successfully!"}
 
@@ -174,9 +174,14 @@ async def test_get_one_room_not_found(client):
 @pytest.mark.asyncio
 async def test_modify_room_not_found(client, method):
     headers = await get_token_from_logged_user(client)
-    # Provide the password body so we pass validation and hit the database search
-    dummy_data = {"current_password": "test_password123", "room_name": "new_name"}
-    response = await client.request(method, "/rooms/9999", json=dummy_data, headers=headers)
+    
+    # Handle DELETE separately to send query parameter
+    if method == "DELETE":
+        response = await client.request(method, "/rooms/9999?current_password=test_password123", headers=headers)
+    else:
+        dummy_data = {"current_password": "test_password123", "room_name": "new_name"}
+        response = await client.request(method, "/rooms/9999", json=dummy_data, headers=headers)
+        
     assert response.status_code == 404
 
 # ---------- Wrong password error for updating room ---------- #
@@ -198,10 +203,8 @@ async def test_delete_room_wrong_password_bad_request(client):
     headers = await get_token_from_logged_user(client)
     room_id = await get_room_id(client, headers=headers, room_name=f"del_{time.time()}")
 
-    room_delete_wrong_password_data = {
-        "current_password": "wrong_password"
-    }
-    response = await client.patch(f"/rooms/{room_id}", json=room_delete_wrong_password_data, headers=headers)
+    # Changed to DELETE and query param instead of PATCH
+    response = await client.request("DELETE", f"/rooms/{room_id}?current_password=wrong_password", headers=headers)
     assert response.status_code == 401
 
 # ------ Not authorized user trying to delete or update the room ------- #
@@ -212,9 +215,14 @@ async def test_update_and_delete_room_not_owner_forbidden(client, method):
     room_id = await get_room_id(client, headers=headers, room_name=f"own_{time.time()}")
 
     header_user_b = await get_token_from_logged_user(client, username="user_b")
-    password_data = {"current_password": "hacker_password", "room_name": "hacker_room_name"}
 
-    response = await client.request(method, f"/rooms/{room_id}", json=password_data, headers=header_user_b)
+    # Handle DELETE separately
+    if method == "DELETE":
+        response = await client.request(method, f"/rooms/{room_id}?current_password=hacker_password", headers=header_user_b)
+    else:
+        password_data = {"current_password": "hacker_password", "room_name": "hacker_room_name"}
+        response = await client.request(method, f"/rooms/{room_id}", json=password_data, headers=header_user_b)
+        
     assert response.status_code == 403
 
 # ---------- Invalid room ID format error for DELETE, PATCH (text instead of number) ---------- #
@@ -223,8 +231,14 @@ async def test_update_and_delete_room_not_owner_forbidden(client, method):
 async def test_delete_update_one_room_invalid_id_unprocessable(client, method):
     headers = await get_token_from_logged_user(client)
     room_id = "invalid_room_id"
-    user_data = {"current_password": "password123", "room_name": "new_room_name"}
-    response = await client.request(method, f"/rooms/{room_id}", json=user_data, headers=headers)
+    
+    # Handle DELETE separately
+    if method == "DELETE":
+        response = await client.request(method, f"/rooms/{room_id}?current_password=password123", headers=headers)
+    else:
+        user_data = {"current_password": "password123", "room_name": "new_room_name"}
+        response = await client.request(method, f"/rooms/{room_id}", json=user_data, headers=headers)
+        
     assert response.status_code == 422
 
 # ---------- Invalid room ID format error for GET (text instead of number) ---------- #

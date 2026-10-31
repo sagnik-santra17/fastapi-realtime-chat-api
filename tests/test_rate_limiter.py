@@ -182,14 +182,14 @@ async def test_login_rate_limiter_allows_five_room_delete_under_sixty_seconds(cl
     # 1. Log in your standard test user
     headers = await get_token_from_logged_user(client, username="room_to_delete")
 
-    delete_payload = {"current_password": "test_password123"}
-    url = "/rooms/999"  # --> Fake room ID so we don't need to create anything
+    url = "/rooms/999?current_password=test_password123" # Sending password in URL
 
     start_time = time.perf_counter()
 
     # 2. Try to delete the fake room 5 times (Limiter lets them pass)
     for i in range(5):
-        response = await client.request("DELETE", url, json=delete_payload, headers=headers)
+        # Removed the json payload from the request
+        response = await client.request("DELETE", url, headers=headers)
         assert response.status_code != status.HTTP_429_TOO_MANY_REQUESTS
         await asyncio.sleep(0.1)
 
@@ -197,7 +197,7 @@ async def test_login_rate_limiter_allows_five_room_delete_under_sixty_seconds(cl
     assert time_taken < 60
 
     # 3. The 6th attempt hits the rate limit wall
-    blocked_response = await client.request("DELETE", url, json=delete_payload, headers=headers)
+    blocked_response = await client.request("DELETE", url, headers=headers)
 
     assert blocked_response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
     assert blocked_response.json()["detail"] == "Rate limit exceeded. Slow down!"

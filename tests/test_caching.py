@@ -254,11 +254,9 @@ async def test_delete_room_invalidates_cache(client):
     await client.get(single_url, headers=headers)
     await client.get(list_url, headers=headers)
 
-    # 3. Update the room to trigger cache invalidation
-    delete_data = {
-        "current_password": "test_password123"
-    }
-    delete_res = await client.request("DELETE", single_url, json=delete_data, headers=headers)
+    # 3. Delete the room to trigger cache invalidation
+    # Sending password as a query parameter instead of JSON body
+    delete_res = await client.request("DELETE", f"{single_url}?current_password=test_password123", headers=headers)
     assert delete_res.status_code == status.HTTP_200_OK
 
     # 4. Set a trap on BOTH database get methods
@@ -298,8 +296,9 @@ async def test_get_messages_saves_to_cache(client, monkeypatch):
             "message_id": 1, 
             "content": "Hello", 
             "room_id": room_id, 
-            "sender_id": sender_data["user_id"], # Matches dynamically now
-            "sent_at": "2026-06-30T12:00:00"
+            "sender_id": sender_data["user_id"], 
+            "sent_at": "2026-06-30T12:00:00",
+            "username": "cache_msg_saves"
         }
     ]
     async def mock_with_data(*args, **kwargs):
@@ -397,6 +396,3 @@ async def test_create_message_invalidates_cache(client):
         # 5. Subsequent GET request must miss cache and crash into the database trap
         with pytest.raises(Exception, match="Cache was successfully deleted and database was targeted!"):
             await client.get(get_url, headers=headers)
-
-
-

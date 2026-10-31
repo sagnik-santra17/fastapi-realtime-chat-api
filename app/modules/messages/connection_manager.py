@@ -21,7 +21,10 @@ class ConnectionManager:
     def disconnect(self, room_id: int, websocket: WebSocket) -> None:
         # Remove the user's connection line from the room list
         if room_id in self.active_connections:
-            self.active_connections[room_id].remove(websocket)
+            # Only remove if the websocket is actually there
+            if websocket in self.active_connections[room_id]:
+                self.active_connections[room_id].remove(websocket)
+            
             # If nobody is left in the room, delete the room from the dictionary
             if not self.active_connections[room_id]:
                 del self.active_connections[room_id]

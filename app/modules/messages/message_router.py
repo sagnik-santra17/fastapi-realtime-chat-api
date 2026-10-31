@@ -37,11 +37,15 @@ async def create_message(
 
     new_message = await service.insert_message(message=message, sender_id=sender_id, room_id=room_id)
 
+    # Inject the username into the response before returning
+    response = MessageResponse.model_validate(new_message)
+    response.username = current_user.username
+
     # Deleting the old message cache
     all_rooms_key = f"messages:room:{room_id}:*"
     await delete_cache(all_rooms_key)
 
-    return new_message
+    return response
 
 # ---------- Getting the last messages ------ #
 @router.get("/", response_model= list[MessageResponse], status_code=status.HTTP_200_OK)
