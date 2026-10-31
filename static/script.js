@@ -3,7 +3,7 @@ const API_URL = "";
 let token = localStorage.getItem("token");
 let userId = localStorage.getItem("user_id");
 let currentSocket = null;
-let currentRoomId = null; // Keeps track of which room is open
+let currentRoomId = null;
 
 // --- DOM Elements ---
 const loginContainer = document.getElementById("login-container");
@@ -36,6 +36,22 @@ const updateProfileForm = document.getElementById("update-profile-form");
 const deleteAccountBtn = document.getElementById("delete-account-btn");
 
 // ==========================================
+// HELPER: LOADING SPINNER
+// ==========================================
+function setButtonLoading(button, isLoading, loadingText = "Loading...") {
+  if (isLoading) {
+    button.dataset.originalText = button.innerHTML;
+    button.innerHTML = `<span class="spinner"></span> ${loadingText}`;
+    button.disabled = true;
+    button.classList.add("loading");
+  } else {
+    button.innerHTML = button.dataset.originalText || "Submit";
+    button.disabled = false;
+    button.classList.remove("loading");
+  }
+}
+
+// ==========================================
 // 1. AUTHENTICATION LOGIC
 // ==========================================
 
@@ -51,11 +67,8 @@ showLoginBtn.addEventListener("click", () => {
 
 loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-
   const btn = loginForm.querySelector("button");
-  const originalText = btn.textContent;
-  btn.textContent = "Logging in...";
-  btn.disabled = true;
+  setButtonLoading(btn, true, "Logging in...");
 
   const formData = new URLSearchParams();
   formData.append("username", document.getElementById("username").value);
@@ -87,23 +100,18 @@ loginForm.addEventListener("submit", async (e) => {
       setInterval(fetchRooms, 5000);
     } else {
       alert("Login failed. Check your username and password.");
-      btn.textContent = originalText;
-      btn.disabled = false;
     }
   } catch (err) {
     alert("Could not connect to the server.");
-    btn.textContent = originalText;
-    btn.disabled = false;
+  } finally {
+    setButtonLoading(btn, false);
   }
 });
 
 signupForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-
   const btn = signupForm.querySelector("button");
-  const originalText = btn.textContent;
-  btn.textContent = "Creating...";
-  btn.disabled = true;
+  setButtonLoading(btn, true, "Creating Account...");
 
   const username = document.getElementById("signup-username").value;
   const email = document.getElementById("signup-email").value;
@@ -138,8 +146,7 @@ signupForm.addEventListener("submit", async (e) => {
   } catch (err) {
     alert("Could not connect to the server.");
   } finally {
-    btn.textContent = originalText;
-    btn.disabled = false;
+    setButtonLoading(btn, false);
   }
 });
 
@@ -159,11 +166,14 @@ logoutBtn.addEventListener("click", () => {
   roomActions.style.display = "none";
 
   chatContainer.style.display = "none";
-
-  // FIXED: Set to 'block' so it reverts to the original layout
   loginContainer.style.display = "block";
   loginSection.style.display = "block";
   signupSection.style.display = "none";
+
+  // FIXED: Reset the login button back to normal so it doesn't say "Logging in..."
+  const loginBtn = loginForm.querySelector("button");
+  setButtonLoading(loginBtn, false);
+  loginBtn.innerHTML = "Login";
 });
 
 // ==========================================
@@ -266,6 +276,7 @@ createRoomBtn.addEventListener("click", async () => {
   if (!name) return;
 
   const payload = { room_name: name, description: "New room" };
+  setButtonLoading(createRoomBtn, true, "Creating...");
 
   try {
     const res = await fetch(`${API_URL}/rooms/`, {
@@ -281,6 +292,8 @@ createRoomBtn.addEventListener("click", async () => {
     else alert("Failed to create room.");
   } catch (err) {
     console.error(err);
+  } finally {
+    setButtonLoading(createRoomBtn, false);
   }
 });
 
@@ -290,9 +303,10 @@ editRoomBtn.addEventListener("click", async () => {
   const newName = prompt("Enter new room name:");
   if (!newName) return;
 
-  // FIXED TEXT: Asking for account password, not room password
   const currentPw = prompt("Enter YOUR ACCOUNT password to confirm:");
   if (!currentPw) return;
+
+  setButtonLoading(editRoomBtn, true, "Saving...");
 
   try {
     const res = await fetch(`${API_URL}/rooms/${currentRoomId}`, {
@@ -313,6 +327,8 @@ editRoomBtn.addEventListener("click", async () => {
     }
   } catch (err) {
     console.error(err);
+  } finally {
+    setButtonLoading(editRoomBtn, false);
   }
 });
 
@@ -320,11 +336,12 @@ editRoomBtn.addEventListener("click", async () => {
 deleteRoomBtn.addEventListener("click", async () => {
   if (!currentRoomId) return;
 
-  // FIXED TEXT: Asking for account password, not room password
   const currentPw = prompt(
     "Are you sure? Enter YOUR ACCOUNT password to DELETE this room:",
   );
   if (!currentPw) return;
+
+  setButtonLoading(deleteRoomBtn, true, "Deleting...");
 
   try {
     const res = await fetch(`${API_URL}/rooms/${currentRoomId}`, {
@@ -349,6 +366,8 @@ deleteRoomBtn.addEventListener("click", async () => {
     }
   } catch (err) {
     console.error(err);
+  } finally {
+    setButtonLoading(deleteRoomBtn, false);
   }
 });
 
@@ -357,6 +376,7 @@ deleteRoomBtn.addEventListener("click", async () => {
 // ==========================================
 
 profileBtn.addEventListener("click", async () => {
+  setButtonLoading(profileBtn, true);
   try {
     const res = await fetch(`${API_URL}/users/me`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -371,6 +391,8 @@ profileBtn.addEventListener("click", async () => {
     }
   } catch (err) {
     console.error(err);
+  } finally {
+    setButtonLoading(profileBtn, false);
   }
 });
 
@@ -384,6 +406,8 @@ window.addEventListener("click", (e) => {
 
 updateProfileForm.addEventListener("submit", async (e) => {
   e.preventDefault();
+  const btn = updateProfileForm.querySelector("button");
+  setButtonLoading(btn, true, "Updating...");
 
   const username = document.getElementById("update-username").value;
   const email = document.getElementById("update-email").value;
@@ -416,6 +440,8 @@ updateProfileForm.addEventListener("submit", async (e) => {
     }
   } catch (err) {
     console.error(err);
+  } finally {
+    setButtonLoading(btn, false);
   }
 });
 
@@ -424,6 +450,8 @@ deleteAccountBtn.addEventListener("click", async () => {
     "Are you sure? This will permanently delete your account.\nEnter your password to confirm:",
   );
   if (!password) return;
+
+  setButtonLoading(deleteAccountBtn, true, "Deleting...");
 
   try {
     const res = await fetch(`${API_URL}/users/me`, {
@@ -443,6 +471,8 @@ deleteAccountBtn.addEventListener("click", async () => {
     }
   } catch (err) {
     console.error(err);
+  } finally {
+    setButtonLoading(deleteAccountBtn, false);
   }
 });
 
