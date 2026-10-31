@@ -186,10 +186,13 @@ async function fetchRooms() {
       const rooms = await res.json();
       const roomArray = Array.isArray(rooms) ? rooms : rooms.rooms || [];
 
-      // 1. Sort the rooms so "General Chat" is always first
+      // 1. Sort the rooms so "General Chat" is always first (ignores emojis)
       roomArray.sort((a, b) => {
-        if (a.room_name === "General Chat") return -1;
-        if (b.room_name === "General Chat") return 1;
+        const aIsGeneral = a.room_name.includes("General Chat");
+        const bIsGeneral = b.room_name.includes("General Chat");
+
+        if (aIsGeneral && !bIsGeneral) return -1;
+        if (!aIsGeneral && bIsGeneral) return 1;
         return 0;
       });
 
