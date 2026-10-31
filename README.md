@@ -1,12 +1,10 @@
-﻿<div align="center">
+<div align="center">
 
-# ⚡ Real-Time Chat API
+# ⚡ Real-Time Chat
 
-### A production-inspired, asynchronous backend built with **FastAPI**, **WebSockets**, **PostgreSQL**, and **Redis**, designed for scalable, secure, and real-time communication.
+### A full-stack chat app where people can sign up, join rooms, and talk live.
 
-<p align="center">
-A modern backend architecture demonstrating clean software engineering principles, asynchronous programming, layered application design, authentication, caching, and real-time messaging.
-</p>
+**[👉 Try it live here 👈](https://fastapi-realtime-chat-api.onrender.com/static/index.html)**
 
 ---
 
@@ -20,91 +18,153 @@ A modern backend architecture demonstrating clean software engineering principle
 ![WebSocket](https://img.shields.io/badge/WebSocket-RealTime-green?style=for-the-badge)
 ![Pytest](https://img.shields.io/badge/Pytest-Tested-blueviolet?style=for-the-badge&logo=pytest)
 ![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker)
+![GitHub Actions](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)
+![Render](https://img.shields.io/badge/Deployed%20on-Render-46E3B7?style=for-the-badge&logo=render&logoColor=white)
 
 </div>
 
 ---
 
-# Real-Time Chat API
+## 👋 Quick note on how this was built
 
-An async backend for a multi-room chat app, built with FastAPI, WebSockets, PostgreSQL, and Redis. Users register, create or join rooms, and exchange messages over a persistent WebSocket connection.
+I'm a **backend developer**, and I want to be upfront about who did what.
 
-This was a personal project to learn how a real backend is structured beyond basic CRUD — async programming, authentication, caching, and real-time communication with WebSockets.
+- **I hand-wrote the entire backend**: the API, the database, Redis, the live WebSocket chat, and the CI/CD pipeline.
+- **AI (Windsurf / Claude) generated the frontend** (the HTML, CSS, and JavaScript you see on screen). I wanted to spend my time on how the system is designed and how fast and reliable the backend is, not on picking button colors.
 
-**Stack:** Python 3.13 · FastAPI · SQLAlchemy 2.0 (async) · PostgreSQL · Redis · Alembic · JWT · Pytest
-
----
-
-## What it does
-
-- Users can register and log in (JWT-based auth, passwords hashed with bcrypt)
-- Users can create chat rooms and view/update/delete the ones they own
-- Inside a room, users connect over a WebSocket and send/receive messages live
-- Message history is stored in PostgreSQL and cached in Redis for faster repeat reads
-- Basic rate limiting stops one user from spamming messages
+So if you're here to judge my work, look at the backend. The pretty screen is there so the backend has something to show off.
 
 ---
 
-## How it's structured
+## 🔗 Try it live
 
-I split the app into layers instead of putting everything in the route functions:
+**https://fastapi-realtime-chat-api.onrender.com/static/index.html**
+
+The easiest way to see it work:
+
+1. Open the link in a normal browser window.
+2. Open it again in an **incognito window** (or a different browser).
+3. Create two different accounts, one in each window.
+4. Join the same room and start chatting. Messages show up instantly on both sides.
+
+> 💤 It's on a free hosting plan, so if nobody has visited in a while, the first load can take a little while to wake up. Give it a minute.
+
+---
+
+## 💬 What is this?
+
+It's a chat app, a bit like a tiny Slack or Discord. You make an account, hop into a chat room (or make your own), and talk to other people in real time, with no refreshing the page.
+
+Here's what you can do in the app:
+
+- **Sign up and log in** from a simple login screen
+- **Browse chat rooms** in a sidebar
+- **Chat live** in a room, with messages appearing the second someone sends them
+- **Create, edit, and delete your own rooms**
+- **Manage your profile**: update your details or delete your account
+- **Hang out in ⭐ General Chat ⭐**, a pinned room that stays at the top of the list for everybody
+
+It's dark-mode, and buttons show a little spinner while they're working, so it feels like a real app and not a school project.
+
+---
+
+## 🧰 What it's made of
+
+| Part | What I used |
+|------|-------------|
+| Backend | Python, FastAPI, WebSockets |
+| Frontend | Plain HTML / CSS / JavaScript (AI-generated) |
+| Database | PostgreSQL (hosted on Neon) |
+| Caching and background worker | Redis (hosted on Render) |
+| DevOps | Docker, GitHub Actions (CI/CD), Render |
+
+The backend serves the frontend directly from a `/static` folder. That means there's just one thing to run, with no separate website to set up.
+
+---
+
+## 🤖 The automatic checks and deploy (CI/CD)
+
+This is the part I'm proudest of on the DevOps side.
+
+Every time I push code to GitHub, a little robot (GitHub Actions) does this for me:
+
+1. Spins up a temporary database
+2. Runs all **82 tests**
+3. Checks that the Docker image builds properly
+4. **Only if everything passes**, automatically deploys the new version to Render
+
+If anything fails, nothing goes live. That means I can't accidentally ship something broken.
+
+---
+
+## 📮 How messages travel (and why Redis is here)
+
+When you send a message, it doesn't go straight to the other person. Instead:
+
+1. Your message goes to a **background worker** (powered by Redis) first.
+2. The worker **saves the message** in the real database.
+3. Then it **broadcasts the message live** to everyone in the room.
+
+Why bother with the extra step? Imagine the app gets popular and I need to run it on two servers instead of one. Without this setup, someone on Server 1 would never see messages from someone on Server 2, because each server only knows about its own users. With the background worker, every server hears every message, so everyone sees everything no matter which server they landed on.
+
+Redis also does two smaller jobs:
+
+- **Remembers the last 50 messages** of a room for 5 minutes, so the database isn't asked the same question over and over
+- **Counts how many messages you've sent recently**, so nobody can spam a room
+
+---
+
+## 🏗️ How the code is organized
+
+I split the backend into layers instead of cramming everything into one place. Think of it like a restaurant:
 
 ```
-Router    → handles the HTTP/WebSocket request itself
-Service   → the actual logic (e.g., "can this user delete this room?")
-Repository → the only place that talks to the database
-Model     → the database table definition
+Router     → the waiter (takes the request)
+Service    → the chef (does the real thinking, like "is this person allowed to delete this room?")
+Repository → the pantry (the only part that touches the database)
+Model      → the labels on the shelves (what the database tables look like)
 ```
 
-The main reason I did it this way: it's much easier to test. A service can be tested by giving it a fake repository instead of needing a real database running, and a route function stays short because it just calls a service and returns the result.
+The big win is that it's much easier to test. I can check the "chef" without needing a real "pantry" running.
 
 ```
 app/
-├── main.py                 # app setup, middleware
-├── redis_client.py         # background task that listens for new messages and broadcasts them
-├── core/                   # config, database connection, JWT/password logic
-├── api/dependencies.py     # auth check, rate limiter, cache helpers
+├── main.py                 # starts the app
+├── redis_client.py         # the background worker that saves and broadcasts messages
+├── core/                   # settings, database connection, login/password logic
+├── api/dependencies.py     # login checks, spam limiter, cache helpers
 ├── modules/
-│   ├── users/                # register, login, profile
-│   ├── rooms/                 # create/update/delete/list rooms
-│   └── messages/              # message history + the WebSocket endpoint
-└── utils/                    # shared validation helpers
+│   ├── users/              # sign up, log in, profile
+│   ├── rooms/              # create, edit, delete, list rooms
+│   └── messages/           # message history + the live chat connection
+├── static/                 # the frontend (HTML/CSS/JS)
+└── utils/                  # small shared helpers
 
-tests/                        # tests for auth, rooms, messages, caching, rate limiting, websockets
-alembic/                      # database migrations
+tests/                      # all the tests
+alembic/                    # database change history
 ```
 
 ---
 
-## Why Redis is in here, not just Postgres
+## 💻 Running it on your own computer
 
-This is the part I'm most proud of figuring out. WebSocket connections are tracked in memory while the server is running — there's a dictionary mapping each chat room to the list of users currently connected to it. That works fine for one server.
+**Test login:** `test@test.com` / `password123`
 
-But if this app ever ran on two servers at once (which is normal for handling more traffic), each server would only know about _its own_ connected users. A message sent on Server 1 would never reach a user connected to Server 2.
+**You'll need:** Python 3.13+, PostgreSQL, and Redis (Docker is the easy way to get Redis).
 
-To fix that, instead of broadcasting a message directly, the WebSocket handler publishes it to a Redis channel. A background task (started when the app starts up) listens to that channel, saves the message to Postgres, and then broadcasts it to whichever users are connected to _that_ server. Every server runs this same background task and listens to the same channel, so it doesn't matter which server a user happens to be connected to — they all hear everything published.
-
-Redis is also used for two smaller things: caching the last 50 messages of a room for 5 minutes (so repeated requests don't hit Postgres every time), and counting how many messages a user has sent recently for rate limiting.
-
----
-
-## Running it locally
-
-**Test Login**: `test@test.com` / `password123`
-
-**Prerequisites:** Python 3.13+, PostgreSQL, Redis (or just use Docker for Redis).
+**1. Get the code and install things**
 
 ```bash
 git clone <repo-url>
 cd real_time_chat_api
 
 python -m venv venv
-source venv/bin/activate        # venv\Scripts\activate on Windows
+source venv/bin/activate        # on Windows: venv\Scripts\activate
 
 pip install -r requirements.txt
 ```
 
-Create a `.env` file in the project root:
+**2. Create a `.env` file** in the project's main folder:
 
 ```env
 DATABASE_URL=postgresql+asyncpg://postgres:yourpassword@localhost:5432/chat_db
@@ -113,73 +173,54 @@ ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REDIS_URL=redis://localhost:6379
 
-# optional — only needed for the welcome email on signup
+# optional, only needed for the welcome email on signup
 GMAIL_USER=
 GMAIL_APP_PASSWORD=
 ```
 
-Apply migrations and start the server:
+**3. Set up the database and start the server**
 
 ```bash
 alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-API runs at `http://127.0.0.1:8000`, with interactive docs at `/docs`.
+**4. Open the app** 🎉
 
-To run Redis (and the app) in Docker instead:
+Once the server is running, go to:
+
+👉 **http://127.0.0.1:8000/static/index.html**
+
+(If you're curious about the behind-the-scenes API, there's a built-in page at `http://127.0.0.1:8000/docs`.)
+
+**Prefer Docker?**
 
 ```bash
 docker compose up --build
 ```
 
-The compose file containerizes Redis, and the app — Postgres is expected to already be running on the host machine.
+This runs Redis and the app for you. PostgreSQL still needs to be running on your own machine.
 
 ---
 
-## API overview
-
-**Users** (`/users`)
-
-- `POST /` — register
-- `POST /login` — returns a JWT
-- `GET /me`, `PATCH /me`, `DELETE /me` — current user profile
-
-**Rooms** (`/rooms`)
-
-- `POST /` — create a room
-- `GET /`, `GET /{room_id}` — list/view rooms
-- `PATCH /{room_id}`, `DELETE /{room_id}` — update or delete (room creator only)
-
-**Messages** (`/messages`)
-
-- `GET /?room_id=` — recent messages for a room (cached)
-- `POST /?room_id=` — send a message over REST
-- `WS /messages/ws/{room_id}?token=` — live connection; send plain text, receive every message broadcast to that room
-
-All routes except register/login require a `Bearer` token from `/users/login`. The WebSocket takes the same JWT as a query parameter instead of a header, since the WebSocket handshake doesn't let the browser attach custom headers.
-
----
-
-## Testing
+## 🧪 Running the tests
 
 ```bash
 pytest -v
 ```
 
-Tests use a separate test database and `fakeredis`, so you don't need a real Redis instance running just to run the suite. They cover the auth flow, rate limiting, cache behavior, the WebSocket connect/send/disconnect cycle, and the background worker that saves and rebroadcasts messages.
+The tests use a separate test database and a pretend Redis, so you don't need a real Redis running. They cover logging in, spam protection, the caching, the live chat connection, and the background worker.
 
 ---
 
-## What I'd improve with more time
+## 🛠️ What I'd improve with more time
 
-- **Logging out doesn't actually invalidate a token.** Since JWTs are just verified, not looked up anywhere, a token keeps working until it naturally expires (30 min by default), even after "logout." A proper fix needs a way to track revoked tokens server-side.
-- **Cache invalidation uses Redis's `KEYS` command with a wildcard**, which scans every key in Redis to find matches. Fine for this project's size, but on a much bigger dataset it would briefly block all other Redis operations. `SCAN` does the same job in smaller, non-blocking chunks.
-- **The rate limiter increments a counter and sets its expiry as two separate Redis commands**, not one atomic step. If the app crashed in between those two calls, that counter could be left without an expiry and never reset. I'd want to combine those into a single script-based command.
-- **No presence, typing indicators, or read receipts** — the layered structure should make these easier to add later without rewriting things, but they're not built yet.
+- **Logging out doesn't instantly kill your login.** Right now, a login "pass" (a token) keeps working until it naturally runs out, which is 30 minutes by default, even after you hit logout. Think of it like a concert wristband: the venue can't cancel it remotely, it just expires. Fixing this means keeping a "banned wristbands" list on the server.
+- **Clearing the cache is a bit clumsy.** To clean out old cached messages, the app asks Redis to search through *every* thing it has stored (the `KEYS` command). That's fine at this size, but in a much bigger app it would make Redis pause for a moment while it searches. There's a gentler way (`SCAN`) that does the same search in small bites.
+- **Fancier chat features aren't built yet**, like seeing who's online, "someone is typing…", or read receipts. The way the code is organized should make adding them fairly painless.
 
 ---
 
-## Author
+## 👤 Author
 
-**Sagnik Santra**
+**Sagnik Santra**, Backend Developer
