@@ -39,7 +39,7 @@ async def live_messages():
                     data_dict = json.loads(raw_string)
 
                     # 3. Pulling the specific data pieces
-                    chat_text = data_dict["text"]
+                    chat_text = data_dict["content"] # <--- FIXED: Changed from "text" to "content"
                     user_id = data_dict["user_id"]
                     room_id = data_dict["room_id"]
 
@@ -62,12 +62,9 @@ async def live_messages():
                             content=chat_text,
                         )
                         db.add(new_msg)
-                        await  db.commit()
+                        await db.commit()
 
                         logger.info(f"Successfully saved message to the database!")
-
-                    # This allows WebSocket to instantly show the messages to users' screen
-                    await manager.broadcast(room_id=room_id, message=f"User {user_id}: {chat_text}")
 
                 except Exception as db_err:
                     # If the database goes offline, catch it here so the loop stays alive
@@ -83,4 +80,3 @@ async def live_messages():
         # Closing both lines safely
         await worker_redis.aclose()
         await listener_redis.aclose()
-
