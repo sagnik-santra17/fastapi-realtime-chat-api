@@ -25,5 +25,8 @@ class Room(Base):
     creator_id: Mapped[int] = mapped_column(ForeignKey('users.user_id', ondelete='CASCADE'))
     owner: Mapped["User"] = relationship(back_populates="rooms")
 
-    messages: Mapped[list["Message"]] = relationship(back_populates="room")
-
+    # cascade="all, delete-orphan" so deleting a room deletes its messages
+    messages: Mapped[list["Message"]] = relationship(
+        back_populates="room", 
+        cascade="all, delete-orphan"
+    )
