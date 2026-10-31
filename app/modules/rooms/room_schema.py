@@ -14,6 +14,7 @@ class RoomResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     room_id: int
     room_name: str
+    creator_id: int
     created_at: datetime
 
 class RoomDelete(BaseModel):

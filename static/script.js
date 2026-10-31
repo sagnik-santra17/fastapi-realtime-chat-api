@@ -52,6 +52,11 @@ showLoginBtn.addEventListener("click", () => {
 loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
+  const btn = loginForm.querySelector("button");
+  const originalText = btn.textContent;
+  btn.textContent = "Logging in...";
+  btn.disabled = true;
+
   const formData = new URLSearchParams();
   formData.append("username", document.getElementById("username").value);
   formData.append("password", document.getElementById("password").value);
@@ -82,14 +87,24 @@ loginForm.addEventListener("submit", async (e) => {
       setInterval(fetchRooms, 5000);
     } else {
       alert("Login failed. Check your username and password.");
+      btn.textContent = originalText;
+      btn.disabled = false;
     }
   } catch (err) {
     alert("Could not connect to the server.");
+    btn.textContent = originalText;
+    btn.disabled = false;
   }
 });
 
 signupForm.addEventListener("submit", async (e) => {
   e.preventDefault();
+
+  const btn = signupForm.querySelector("button");
+  const originalText = btn.textContent;
+  btn.textContent = "Creating...";
+  btn.disabled = true;
+
   const username = document.getElementById("signup-username").value;
   const email = document.getElementById("signup-email").value;
   const password = document.getElementById("signup-password").value;
@@ -122,6 +137,9 @@ signupForm.addEventListener("submit", async (e) => {
     }
   } catch (err) {
     alert("Could not connect to the server.");
+  } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
   }
 });
 
@@ -141,7 +159,9 @@ logoutBtn.addEventListener("click", () => {
   roomActions.style.display = "none";
 
   chatContainer.style.display = "none";
-  loginContainer.style.display = "flex";
+
+  // FIXED: Set to 'block' so it reverts to the original layout
+  loginContainer.style.display = "block";
   loginSection.style.display = "block";
   signupSection.style.display = "none";
 });
@@ -165,7 +185,9 @@ async function fetchRooms() {
         roomArray.forEach((room) => {
           const li = document.createElement("li");
           li.textContent = room.room_name;
-          li.onclick = () => connectToRoom(room.room_id, room.room_name);
+          // Pass room.creator_id so we know who owns it
+          li.onclick = () =>
+            connectToRoom(room.room_id, room.room_name, room.creator_id);
           roomList.appendChild(li);
         });
       }
@@ -175,13 +197,19 @@ async function fetchRooms() {
   }
 }
 
-async function connectToRoom(roomId, roomName) {
+async function connectToRoom(roomId, roomName, creatorId) {
   if (currentSocket) currentSocket.close();
 
   currentRoomId = roomId;
   messagesContainer.innerHTML = "";
   document.querySelector(".chat-header h2").textContent = roomName;
-  roomActions.style.display = "flex"; // Show edit/delete buttons
+
+  // FIXED: Only show Edit/Delete buttons if the current user created this room
+  if (parseInt(creatorId) === parseInt(userId)) {
+    roomActions.style.display = "flex";
+  } else {
+    roomActions.style.display = "none";
+  }
 
   try {
     const res = await fetch(`${API_URL}/messages/?room_id=${roomId}`, {
@@ -262,7 +290,8 @@ editRoomBtn.addEventListener("click", async () => {
   const newName = prompt("Enter new room name:");
   if (!newName) return;
 
-  const currentPw = prompt("Enter room password to confirm:");
+  // FIXED TEXT: Asking for account password, not room password
+  const currentPw = prompt("Enter YOUR ACCOUNT password to confirm:");
   if (!currentPw) return;
 
   try {
@@ -290,8 +319,10 @@ editRoomBtn.addEventListener("click", async () => {
 // Delete Room Action
 deleteRoomBtn.addEventListener("click", async () => {
   if (!currentRoomId) return;
+
+  // FIXED TEXT: Asking for account password, not room password
   const currentPw = prompt(
-    "Are you sure? Enter room password to DELETE this room:",
+    "Are you sure? Enter YOUR ACCOUNT password to DELETE this room:",
   );
   if (!currentPw) return;
 
@@ -326,7 +357,6 @@ deleteRoomBtn.addEventListener("click", async () => {
 // ==========================================
 
 profileBtn.addEventListener("click", async () => {
-  // Fetch current profile data to pre-fill the form
   try {
     const res = await fetch(`${API_URL}/users/me`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -348,7 +378,6 @@ closeProfileBtn.addEventListener("click", () => {
   profileModal.classList.remove("show");
 });
 
-// Close modal if clicking outside the box
 window.addEventListener("click", (e) => {
   if (e.target === profileModal) profileModal.classList.remove("show");
 });
@@ -361,13 +390,11 @@ updateProfileForm.addEventListener("submit", async (e) => {
   const password = document.getElementById("update-password").value;
   const current_password = document.getElementById("current-password").value;
 
-  // Build the payload dynamically
   const payload = { username, email, current_password };
 
-  // If they typed a new password, include it and a confirmation
   if (password.trim() !== "") {
     payload.password = password;
-    payload.confirm_password = password; // Send same for both to satisfy backend
+    payload.confirm_password = password;
   }
 
   try {
@@ -405,12 +432,12 @@ deleteAccountBtn.addEventListener("click", async () => {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ password: password }), // Backend UserDelete schema expects 'password'
+      body: JSON.stringify({ password: password }),
     });
 
     if (res.ok) {
       alert("Account deleted.");
-      logoutBtn.click(); // Trigger logout logic
+      logoutBtn.click();
     } else {
       alert("Failed to delete account. Check your password.");
     }
