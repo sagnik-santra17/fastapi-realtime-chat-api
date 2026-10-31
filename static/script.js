@@ -96,6 +96,8 @@ loginForm.addEventListener("submit", async (e) => {
       loginContainer.style.display = "none";
       chatContainer.style.display = "flex";
 
+      // FIX: Clear the memory so the sidebar redraws immediately
+      delete roomList.dataset.str;
       fetchRooms();
       setInterval(fetchRooms, 5000);
     } else {
@@ -124,7 +126,6 @@ signupForm.addEventListener("submit", async (e) => {
     const res = await fetch(`${API_URL}/users/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      // FIXED: Removed is_active from the payload
       body: JSON.stringify({ username, email, password, confirm_password }),
     });
 
@@ -156,6 +157,7 @@ logoutBtn.addEventListener("click", () => {
   currentRoomId = null;
 
   roomList.innerHTML = "";
+  delete roomList.dataset.str; // FIX: Clear memory on logout too
   messagesContainer.innerHTML = "";
   document.querySelector(".chat-header h2").textContent = "Select a room";
   roomActions.style.display = "none";
@@ -165,7 +167,6 @@ logoutBtn.addEventListener("click", () => {
   loginSection.style.display = "block";
   signupSection.style.display = "none";
 
-  // Force reset the login button text
   const loginBtn = loginForm.querySelector("button");
   setButtonLoading(loginBtn, false);
   loginBtn.innerHTML = "Login";
@@ -185,7 +186,14 @@ async function fetchRooms() {
       const rooms = await res.json();
       const roomArray = Array.isArray(rooms) ? rooms : rooms.rooms || [];
 
-      // FIXED: Check if the actual string of room names changed to force a UI update
+      // 1. Sort the rooms so "General Chat" is always first
+      roomArray.sort((a, b) => {
+        if (a.room_name === "General Chat") return -1;
+        if (b.room_name === "General Chat") return 1;
+        return 0;
+      });
+
+      // 2. Check if the list changed to trigger an update
       const newListStr = roomArray.map((r) => r.room_name).join(",");
       if (roomList.dataset.str !== newListStr) {
         roomList.dataset.str = newListStr;
@@ -208,7 +216,6 @@ async function connectToRoom(roomId, roomName, creatorId) {
   if (currentSocket) currentSocket.close();
 
   currentRoomId = roomId;
-  // Show a loading state so it doesn't look empty while fetching
   messagesContainer.innerHTML =
     "<div style='text-align:center; color:#888; margin-top:20px;'>Loading messages...</div>";
   document.querySelector(".chat-header h2").textContent = roomName;
@@ -225,12 +232,12 @@ async function connectToRoom(roomId, roomName, creatorId) {
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    // RACE CONDITION FIX: If user clicks another room while this is loading, ignore this result
+    // RACE CONDITION FIX
     if (currentRoomId !== roomId) return;
 
     if (res.ok) {
       const pastMessages = await res.json();
-      messagesContainer.innerHTML = ""; // Clear loading text
+      messagesContainer.innerHTML = "";
 
       if (pastMessages.length === 0) {
         messagesContainer.innerHTML =
@@ -238,7 +245,6 @@ async function connectToRoom(roomId, roomName, creatorId) {
       } else {
         pastMessages.forEach((msg) => {
           const isMine = parseInt(msg.sender_id) === parseInt(userId);
-          // Use msg.username sent from the backend history
           const senderName = isMine
             ? "You"
             : msg.username || `User ${msg.sender_id}`;
@@ -269,7 +275,6 @@ async function connectToRoom(roomId, roomName, creatorId) {
     const isMine = parseInt(data.user_id) === parseInt(userId);
     const senderName = isMine ? "You" : data.username;
 
-    // If we receive a message, remove the "No messages yet" or "Loading" text
     if (
       messagesContainer.innerHTML.includes("No messages yet") ||
       messagesContainer.innerHTML.includes("Loading messages")
@@ -375,7 +380,6 @@ deleteRoomBtn.addEventListener("click", async () => {
   setButtonLoading(deleteRoomBtn, true, "Deleting...");
 
   try {
-    // FIXED: Sending password in the URL so Render doesn't strip it
     const res = await fetch(
       `${API_URL}/rooms/${currentRoomId}?current_password=${encodeURIComponent(currentPw)}`,
       {
@@ -514,6 +518,7 @@ deleteAccountBtn.addEventListener("click", async () => {
 if (token && userId) {
   loginContainer.style.display = "none";
   chatContainer.style.display = "flex";
+  delete roomList.dataset.str; // FIX: Clear memory on page load
   fetchRooms();
   setInterval(fetchRooms, 5000);
 }
