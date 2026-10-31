@@ -170,7 +170,7 @@ logoutBtn.addEventListener("click", () => {
   loginSection.style.display = "block";
   signupSection.style.display = "none";
 
-  // FIXED: Reset the login button back to normal so it doesn't say "Logging in..."
+  // Force reset the login button text
   const loginBtn = loginForm.querySelector("button");
   setButtonLoading(loginBtn, false);
   loginBtn.innerHTML = "Login";
@@ -195,7 +195,6 @@ async function fetchRooms() {
         roomArray.forEach((room) => {
           const li = document.createElement("li");
           li.textContent = room.room_name;
-          // Pass room.creator_id so we know who owns it
           li.onclick = () =>
             connectToRoom(room.room_id, room.room_name, room.creator_id);
           roomList.appendChild(li);
@@ -211,10 +210,12 @@ async function connectToRoom(roomId, roomName, creatorId) {
   if (currentSocket) currentSocket.close();
 
   currentRoomId = roomId;
-  messagesContainer.innerHTML = "";
+  // Show a loading state so it doesn't look empty while fetching
+  messagesContainer.innerHTML =
+    "<div style='text-align:center; color:#888; margin-top:20px;'>Loading messages...</div>";
   document.querySelector(".chat-header h2").textContent = roomName;
 
-  // FIXED: Only show Edit/Delete buttons if the current user created this room
+  // Check ownership for Edit/Delete buttons
   if (parseInt(creatorId) === parseInt(userId)) {
     roomActions.style.display = "flex";
   } else {
@@ -226,18 +227,38 @@ async function connectToRoom(roomId, roomName, creatorId) {
       headers: { Authorization: `Bearer ${token}` },
     });
 
+    // RACE CONDITION FIX: If user clicks another room while this is loading, ignore this result
+    if (currentRoomId !== roomId) return;
+
     if (res.ok) {
       const pastMessages = await res.json();
-      pastMessages.forEach((msg) => {
-        const isMine = parseInt(msg.sender_id) === parseInt(userId);
-        const senderName = isMine ? "You" : `User ${msg.sender_id}`;
-        addMessage(`${senderName}: ${msg.content}`, isMine ? "mine" : "other");
-      });
+      messagesContainer.innerHTML = ""; // Clear loading text
+
+      if (pastMessages.length === 0) {
+        messagesContainer.innerHTML =
+          "<div style='text-align:center; color:#888; margin-top:20px;'>No messages yet. Say hi!</div>";
+      } else {
+        pastMessages.forEach((msg) => {
+          const isMine = parseInt(msg.sender_id) === parseInt(userId);
+          const senderName = isMine ? "You" : `User ${msg.sender_id}`;
+          addMessage(
+            `${senderName}: ${msg.content}`,
+            isMine ? "mine" : "other",
+          );
+        });
+      }
+    } else {
+      messagesContainer.innerHTML =
+        "<div style='text-align:center; color:#ef4444; margin-top:20px;'>Failed to load history.</div>";
     }
   } catch (err) {
-    console.log("No history found");
+    if (currentRoomId === roomId) {
+      messagesContainer.innerHTML =
+        "<div style='text-align:center; color:#ef4444; margin-top:20px;'>Network error.</div>";
+    }
   }
 
+  // Connect WebSocket
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const wsUrl = `${protocol}//${window.location.host}/messages/ws/${roomId}?token=${token}`;
   currentSocket = new WebSocket(wsUrl);
@@ -246,6 +267,15 @@ async function connectToRoom(roomId, roomName, creatorId) {
     const data = JSON.parse(event.data);
     const isMine = parseInt(data.user_id) === parseInt(userId);
     const senderName = isMine ? "You" : data.username;
+
+    // If we receive a message, remove the "No messages yet" or "Loading" text
+    if (
+      messagesContainer.innerHTML.includes("No messages yet") ||
+      messagesContainer.innerHTML.includes("Loading messages")
+    ) {
+      messagesContainer.innerHTML = "";
+    }
+
     addMessage(`${senderName}: ${data.content}`, isMine ? "mine" : "other");
   };
 }
