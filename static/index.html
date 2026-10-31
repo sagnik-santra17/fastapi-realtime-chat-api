@@ -53,15 +53,33 @@
       <div id="chat-container" style="display: none">
         <!-- SIDEBAR -->
         <div id="room-list">
-          <h2>Rooms</h2>
+          <div class="sidebar-header">
+            <h2>Rooms</h2>
+            <button id="profile-button" class="icon-btn">Profile</button>
+          </div>
+
           <ul id="room-list-items"></ul>
+
           <button id="create-room-button">Create Room</button>
+          <!-- LOGOUT BUTTON ADDED HERE -->
+          <button id="logout-button">Logout</button>
         </div>
 
         <!-- MAIN CHAT WINDOW -->
         <div id="chat-window">
-          <h2>Select a room</h2>
+          <!-- CHAT HEADER WITH EDIT/DELETE -->
+          <div class="chat-header">
+            <h2>Select a room</h2>
+            <div id="room-actions" style="display: none">
+              <button id="edit-room-btn" class="action-btn">Edit</button>
+              <button id="delete-room-btn" class="action-btn danger">
+                Delete
+              </button>
+            </div>
+          </div>
+
           <div id="messages-container"></div>
+
           <form id="message-form">
             <input
               type="text"
@@ -71,6 +89,37 @@
             />
             <button type="submit">Send</button>
           </form>
+        </div>
+      </div>
+
+      <!-- PROFILE MODAL (Hidden by default) -->
+      <div id="profile-modal" class="modal">
+        <div class="modal-content">
+          <span class="close-btn" id="close-profile">&times;</span>
+          <h2>My Profile</h2>
+
+          <form id="update-profile-form">
+            <label>Username:</label>
+            <input type="text" id="update-username" />
+
+            <label>Email:</label>
+            <input type="email" id="update-email" />
+
+            <label>New Password (leave blank to keep current):</label>
+            <input type="password" id="update-password" />
+
+            <label>Current Password (required to save):</label>
+            <input type="password" id="current-password" required />
+
+            <button type="submit">Update Profile</button>
+          </form>
+
+          <hr style="margin: 20px 0; border-color: #333" />
+
+          <h3 style="color: #ef4444">Danger Zone</h3>
+          <button id="delete-account-btn" class="danger" style="width: 100%">
+            Delete My Account
+          </button>
         </div>
       </div>
     </div>

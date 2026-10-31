@@ -4,15 +4,15 @@ import logging
 import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, status, Query, WebSocket, WebSocketDisconnect, HTTPException
 from jose import jwt, JWTError
-from sqlalchemy import select # <-- ADDED FOR DATABASE QUERY
+from sqlalchemy import select 
 
 # Local imports
 from app.api.dependencies import get_current_user, message_service_dependency, RateLimiter, delete_cache, get_cache, set_cache
 from app.core.config import settings
-from app.core.database import AsyncSessionLocal # <-- ADDED FOR DATABASE SESSION
+from app.core.database import AsyncSessionLocal 
 from app.modules.messages.message_schema import MessageResponse, MessageCreate
 from app.modules.messages.connection_manager import manager
-from app.modules.users.user_model import User # <-- ADDED FOR USER MODEL
+from app.modules.users.user_model import User 
 
 router = APIRouter(prefix="/messages", tags=["Messages"])
 
@@ -156,6 +156,10 @@ async def websocket_endpoint(
 
             # 3. Shouting the real message into Redis (for the database worker)
             await redis_client.publish("room:messages", json_str)
+
+            # Clear the history cache so the next person who joins gets fresh data from the DB
+            all_messages_key = f"messages:room:{room_id}:*"
+            await delete_cache(all_messages_key)
 
             # 4. Broadcasting the message to everyone connected to this room!
             await manager.broadcast(room_id, json_str)
