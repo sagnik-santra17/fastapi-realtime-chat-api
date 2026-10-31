@@ -12,3 +12,4 @@ class MessageResponse(BaseModel):
     sender_id: int
     room_id: int
     sent_at: datetime
+    username: str = "Unknown"  # <--- to show the name of the sender

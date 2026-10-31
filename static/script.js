@@ -240,7 +240,10 @@ async function connectToRoom(roomId, roomName, creatorId) {
       } else {
         pastMessages.forEach((msg) => {
           const isMine = parseInt(msg.sender_id) === parseInt(userId);
-          const senderName = isMine ? "You" : `User ${msg.sender_id}`;
+          // FIXED: Use the username sent from the backend history
+          const senderName = isMine
+            ? "You"
+            : msg.username || `User ${msg.sender_id}`;
           addMessage(
             `${senderName}: ${msg.content}`,
             isMine ? "mine" : "other",
